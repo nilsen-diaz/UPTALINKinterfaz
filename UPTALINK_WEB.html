@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UptaLink — Analisis de Radioenlaces 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    </script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { fontFamily: { display: ['"Space Grotesk"','sans-serif'], mono: ['"JetBrains Mono"','monospace'] } } }
+        }
+    </script>
+    <style>
+        :root { --bg:#080c14;--panel:#0f1623;--border:#1e293b;--text:#e2e8f0;--muted:#64748b;--accent:#00ff88;--accent-dim:#00cc6a;--amber:#f59e0b;--danger:#ef4444;--cyan:#06b6d4; }
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif}
+        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--panel)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+        .input-field{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:5px 7px;border-radius:5px;width:100%;transition:border-color .2s,box-shadow .2s;outline:none}
+        .input-field:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,255,136,.12)}
+        .input-field::placeholder{color:var(--muted);font-size:10px}
+        .map-btn{background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:9px;font-weight:700;padding:3px 7px;border-radius:4px;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.5px}
+        .map-btn:hover{border-color:var(--accent);color:var(--accent)}
+        .map-btn.active{background:rgba(0,255,136,.1);border-color:var(--accent);color:var(--accent)}
+        .btn-calc{background:linear-gradient(135deg,var(--accent-dim),var(--accent));color:#080c14;font-weight:700;font-size:12px;padding:9px 14px;border:none;border-radius:7px;cursor:pointer;width:100%;transition:all .25s;letter-spacing:.3px;text-transform:uppercase}
+        .btn-calc:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,255,136,.3)}
+        .btn-calc:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+        .console-line{font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.5;padding:1px 0;border-bottom:1px solid rgba(30,41,59,.2)}
+        .console-success{color:var(--accent)}.console-error{color:var(--danger)}.console-info{color:var(--amber)}.console-muted{color:var(--muted)}
+        .leaflet-container{background:var(--bg)!important}
+        .leaflet-control-zoom a{background:var(--panel)!important;color:var(--text)!important;border-color:var(--border)!important}
+        .leaflet-control-zoom a:hover{background:var(--border)!important}
+        .leaflet-control-attribution{display:none!important}
+        .section-label{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:8px}
+        @keyframes fadeSlideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        .animate-in{animation:fadeSlideIn .25s ease-out forwards}
+        .header-glow{position:relative}
+        .header-glow::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.35}
+        .status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;font-family:'JetBrains Mono',monospace}
+        .status-viable{background:rgba(0,255,136,.1);color:var(--accent);border:1px solid rgba(0,255,136,.3)}
+        .status-failed{background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
+        .status-idle{background:rgba(100,116,139,.1);color:var(--muted);border:1px solid rgba(100,116,139,.2)}
+        #consoleOverlay{position:fixed;top:44px;right:8px;bottom:8px;width:320px;z-index:1000;background:rgba(15,22,35,.96);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:10px;display:none;flex-direction:column;box-shadow:-4px 0 30px rgba(0,0,0,.5);transition:opacity .2s,transform .2s}
+        #consoleOverlay.open{display:flex;animation:slideInRight .25s ease-out}
+        @keyframes slideInRight{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+        #profileTooltip{position:absolute;background:rgba(15,22,35,.95);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text);pointer-events:none;display:none;z-index:100;white-space:nowrap}
+        .point-indicator{display:inline-block;width:7px;height:7px;border-radius:50%;animation:pulse-dot 1.5s ease-in-out infinite}
+        @keyframes pulse-dot{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 0 5px transparent}}
+        .idle-badge{position:absolute;bottom:12px;right:16px;background:rgba(15,22,35,.88);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:8px;padding:8px 14px;max-width:320px;z-index:10}
+    </style>
+</head>
+<body>
+<div class="flex flex-col h-screen">
+    <header class="header-glow flex items-center justify-between px-4 py-2 bg-base-700/80 backdrop-blur-sm shrink-0" style="min-height:44px">
+        <div class="flex items-center gap-2.5">
+            <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,var(--accent-dim),var(--accent))"><i class="fa-solid fa-tower-broadcast text-base-900 text-xs"></i></div>
+            <h1 class="font-display font-bold text-sm tracking-tight">UptaLink</h1>
+            <span class="text-[8px] font-mono tracking-widest uppercase ml-1" style="color:var(--border)">v1.0</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <div id="statusBadge" class="status-badge status-idle"><span class="w-1.5 h-1.5 rounded-full bg-current"></span><span id="statusText">Sin analizar</span></div>
+            <button id="btnToggleConsole" onclick="toggleConsole()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-mono font-semibold transition-all" style="background:var(--bg);border:1px solid var(--border);color:var(--muted)" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><i class="fa-solid fa-terminal text-[9px]"></i> Consola</button>
+        </div>
+    </header>
+    <div class="flex flex-1 overflow-hidden">
+        <aside class="w-[220px] shrink-0 bg-base-700/50 border-r overflow-y-auto" style="border-color:var(--border)">
+            <div class="p-3 space-y-4">
+                <div>
+                    <div class="section-label"><i class="fa-solid fa-location-dot mr-1"></i> Puntos</div>
+                    <div class="mb-2">
+                        <div class="flex items-center gap-1.5 mb-1"><span class="point-indicator" style="color:#f59e0b;background:#f59e0b"></span><span class="text-[10px] font-bold" style="color:#f59e0b">PUNTO A</span></div>
+                        <div class="grid grid-cols-2 gap-1"><input type="text" id="latA" class="input-field" placeholder="Lat"><input type="text" id="lonA" class="input-field" placeholder="Lon"></div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="flex items-center gap-1.5 mb-1"><span class="point-indicator" style="color:#06b6d4;background:#06b6d4"></span><span class="text-[10px] font-bold" style="color:#06b6d4">PUNTO B</span></div>
+                        <div class="grid grid-cols-2 gap-1"><input type="text" id="latB" class="input-field" placeholder="Lat"><input type="text" id="lonB" class="input-field" placeholder="Lon"></div>
+                    </div>
+                    <button id="btnSwitchPoint" class="map-btn w-full" onclick="switchActivePoint()"><i class="fa-solid fa-arrows-rotate mr-1"></i> Click: Punto A</button>
+                </div>
+                <div>
+                    <div class="section-label"><i class="fa-solid fa-satellite-dish mr-1"></i> RF</div>
+                    <div class="space-y-2">
+                        <div><label class="text-[9px] font-mono block mb-0.5" style="color:var(--muted)">FREQ (GHz)</label><input type="number" id="frequency" class="input-field" value="5.0" min="0.1" max="100" step="0.1"></div>
+                        <div class="grid grid-cols-2 gap-1.5"><div><label class="text-[9px] font-mono block mb-0.5" style="color:var(--muted)">H.ANT A (m)</label><input type="number" id="heightA" class="input-field" value="30" min="1" max="300"></div><div><label class="text-[9px] font-mono block mb-0.5" style="color:var(--muted)">H.ANT B (m)</label><input type="number" id="heightB" class="input-field" value="30" min="1" max="300"></div></div>
+                        <div class="grid grid-cols-2 gap-1.5"><div><label class="text-[9px] font-mono block mb-0.5" style="color:var(--muted)">G.ANT A (dBi)</label><input type="number" id="gainA" class="input-field" value="30" min="0" max="50" step="0.5"></div><div><label class="text-[9px] font-mono block mb-0.5" style="color:var(--muted)">G.ANT B (dBi)</label><input type="number" id="gainB" class="input-field" value="30" min="0" max="50" step="0.5"></div></div>
+                        <div><label class="text-[9px] font-mono block mb-0.5" style="color:var(--muted)">SENSIBILIDAD (dBm)</label><input type="number" id="sensitivity" class="input-field" value="-80" min="-120" max="0"></div>
+                        <div><label class="text-[9px] font-mono block mb-0.5" style="color:var(--muted)">FACTOR K</label><input type="number" id="kFactor" class="input-field" value="1.333" min="0.5" max="2.0" step="0.01"></div>
+                    </div>
+                </div>
+                <button id="btnCalculate" class="btn-calc" onclick="runAnalysis()"><i class="fa-solid fa-bolt mr-1.5"></i>Analizar</button>
+                <div id="quickSummary" class="hidden">
+                    <div class="section-label"><i class="fa-solid fa-chart-line mr-1"></i> Resultado</div>
+                    <div class="space-y-1 font-mono text-[10px]">
+                        <div class="flex justify-between"><span style="color:var(--muted)">Distancia</span><span id="sumDist">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">FSPL</span><span id="sumFSPL">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Rx estimado</span><span id="sumRx">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Margen</span><span id="sumMargin">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Obstruccion</span><span id="sumObs">—</span></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <div class="flex flex-1 overflow-hidden">
+                <div class="flex-1 flex flex-col border-r" style="border-color:var(--border)">
+                    <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-base-800/40 shrink-0"><span class="text-[8px] font-mono font-bold uppercase tracking-wider" style="color:var(--border)">Mapa 2D</span><div class="flex gap-1 ml-auto"><button class="map-btn active" id="btnOSM" onclick="setMapProvider('osm')">OSM</button><button class="map-btn" id="btnGoogle" onclick="setMapProvider('google')">Sat</button><button class="map-btn" id="btnTopo" onclick="setMapProvider('topo')">Topo</button></div></div>
+                    <div id="leafletMap" class="flex-1"></div>
+                </div>
+                <div class="flex-1 flex flex-col">
+                    <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-base-800/40 shrink-0"><span class="text-[8px] font-mono font-bold uppercase tracking-wider" style="color:var(--border)">Terreno 3D</span><span class="text-[8px] font-mono ml-auto" style="color:var(--border)">Arrastrar = rotar | Scroll = zoom</span></div>
+                    <div id="threeContainer" class="flex-1 relative"></div>
+                </div>
+            </div>
+            <div class="h-[300px] shrink-0 flex flex-col border-t" style="border-color:var(--border)">
+                <div class="flex items-center gap-2 px-2.5 py-1.5 bg-base-800/40 shrink-0">
+                    <span class="text-[8px] font-mono font-bold uppercase tracking-wider" style="color:var(--border)">Perfil de Elevacion</span>
+                    <div class="flex items-center gap-4 ml-5 text-[8px] font-mono" style="color:var(--muted)">
+                        <span><span class="inline-block w-3 h-[3px] rounded mr-0.5" style="background:#4ade80"></span>Terreno</span>
+                        <span><span class="inline-block w-3 border-t border-dashed mr-0.5" style="border-color:#ef4444"></span>LOS</span>
+                        <span><span class="inline-block w-3 h-[6px] rounded mr-0.5 opacity-40" style="background:#facc15"></span>Fresnel 60%</span>
+                        <span><span class="inline-block w-3 h-[6px] rounded mr-0.5 opacity-60" style="background:#ef4444"></span>Obstruccion</span>
+                    </div>
+                </div>
+                <div class="flex-1 relative" style="background:var(--bg)">
+                    <canvas id="profileCanvas"></canvas>
+                    <div id="profileTooltip"></div>
+                    <div id="profilePlaceholder" class="idle-badge">
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fa-solid fa-crosshairs text-[10px]" style="color:var(--accent)"></i>
+                            <span class="text-[10px] font-semibold" style="color:var(--text)">Listo para analizar</span>
+                        </div>
+                        <p class="text-[9px] font-mono" style="color:var(--muted)">Seleccione 2 puntos en el mapa y presione <span style="color:var(--accent)">Analizar</span></p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+<div id="consoleOverlay">
+    <div class="flex items-center justify-between px-3 py-2 border-b shrink-0" style="border-color:var(--border)">
+        <span class="text-[8px] font-mono font-bold uppercase tracking-wider" style="color:var(--muted)">Consola de Resultados</span>
+        <button onclick="toggleConsole()" class="text-xs cursor-pointer hover:text-white transition-colors" style="color:var(--muted)"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="flex items-center gap-1 px-3 py-1 border-b shrink-0" style="border-color:var(--border)">
+        <button onclick="clearConsole()" class="text-[8px] font-mono cursor-pointer hover:text-white transition-colors px-1.5 py-0.5 rounded" style="color:var(--muted);background:var(--bg)"><i class="fa-solid fa-trash-can mr-0.5"></i>Limpiar</button>
+    </div>
+    <div id="consoleOutput" class="flex-1 overflow-y-auto p-2.5 space-y-0"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const state = { activePoint:'A', pointA:null, pointB:null, markerA:null, markerB:null, mapProvider:'osm', terrainData:null, analysisResult:null, isAnalyzed:false };
+
+// === MATEMATICAS RF ===
+function haversine(a,b,c,d){const R=6371000,tr=x=>x*Math.PI/180,dL=tr(c-a),dN=tr(d-b),v=Math.sin(dL/2)**2+Math.cos(tr(a))*Math.cos(tr(c))*Math.sin(dN/2)**2;return R*2*Math.atan2(Math.sqrt(v),Math.sqrt(1-v))}
+function calcFSPL(d,f){return d<=0?0:20*Math.log10(d)+20*Math.log10(f*1000)+32.44}
+function calcFR(dt,d1,f){if(dt<=0||d1<=0)return 0;const d2=dt-d1;return d2<=0?0:17.32*Math.sqrt((d1*d2)/(f*dt))}
+function eDrop(d,k){const m=d*1000;return(m**2)/(2*6371000*k)}
+
+// === TERRENO ===
+const TS=2000,TR=250;
+function tH(x,z){return 60*Math.sin(x*.0028)*Math.cos(z*.0035)+35*Math.sin(x*.006+z*.004)+18*Math.cos(x*.012-z*.009)+12*Math.sin(x*.022+1.3)*Math.cos(z*.018+.7)+90}
+function genTD(){const d=[],h=TS/2;for(let j=0;j<TR;j++){const r=[];for(let i=0;i<TR;i++)r.push(tH((i/(TR-1))*TS-h,(j/(TR-1))*TS-h));d.push(r)}return d}
+function sE(d,x,z){const h=TS/2,fx=((x+h)/TS)*(TR-1),fz=((z+h)/TS)*(TR-1),i0=Math.max(0,Math.min(TR-2,Math.floor(fx))),j0=Math.max(0,Math.min(TR-2,Math.floor(fz))),tx=fx-i0,tz=fz-j0;return d[j0][i0]*(1-tx)*(1-tz)+d[j0][i0+1]*tx*(1-tz)+d[j0+1][i0]*(1-tx)*tz+d[j0+1][i0+1]*tx*tz}
+function extProf(d,x1,z1,x2,z2,n){const ds=[],es=[];for(let i=0;i<n;i++){const t=i/(n-1),x=x1+t*(x2-x1),z=z1+t*(z2-z1);ds.push(Math.sqrt((x-x1)**2+(z-z1)**2));es.push(sE(d,x,z))}return{distances:ds,elevations:es}}
+
+// === LEAFLET ===
+const lMap=L.map('leafletMap',{center:[40.4168,-3.7038],zoom:13,zoomControl:true});
+const mL={osm:L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}),google:L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:20}),topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17})};
+let cL=mL.osm;cL.addTo(lMap);
+window.setMapProvider=function(p){try{lMap.removeLayer(cL)}catch(e){}document.querySelectorAll('.map-btn').forEach(b=>b.classList.remove('active'));const b=document.getElementById({osm:'btnOSM',google:'btnGoogle',topo:'btnTopo'}[p]);if(b)b.classList.add('active');try{cL=mL[p];cL.addTo(lMap);state.mapProvider=p;logC(`Capa: ${p.toUpperCase()}`,'info')}catch(e){logC(`Error ${p}. Fallback OSM`,'error');cL=mL.osm;cL.addTo(lMap);document.getElementById('btnOSM').classList.add('active')}};
+window.switchActivePoint=function(){state.activePoint=state.activePoint==='A'?'B':'A';document.getElementById('btnSwitchPoint').innerHTML=`<i class="fa-solid fa-arrows-rotate mr-1"></i> Click: Punto ${state.activePoint}`};
+lMap.on('click',function(e){const{lat,lng}=e.latlng,t=state.activePoint,cl=t==='A'?'#f59e0b':'#06b6d4',lb=t==='A'?'Punto A (Tx)':'Punto B (Rx)';state['point'+t]={lat,lon:lng};if(state['marker'+t])lMap.removeLayer(state['marker'+t]);state['marker'+t]=L.marker([lat,lng],{icon:L.divIcon({className:'',html:`<div style="width:12px;height:12px;background:${cl};border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px ${cl}88"></div>`,iconSize:[12,12],iconAnchor:[6,6]})}).addTo(lMap).bindTooltip(lb,{direction:'top'});document.getElementById('lat'+t).value=lat.toFixed(6);document.getElementById('lon'+t).value=lng.toFixed(6);logC(`Punto ${t}: ${lat.toFixed(6)}, ${lng.toFixed(6)}`,'success');updML()});
+let mLn=null;function updML(){if(mLn){lMap.removeLayer(mLn);mLn=null}if(state.pointA&&state.pointB)mLn=L.polyline([[state.pointA.lat,state.pointA.lon],[state.pointB.lat,state.pointB.lon]],{color:'#ef4444',weight:2,dashArray:'8,6',opacity:.8}).addTo(lMap)}
+
+// === THREE.JS ===
+const tc=document.getElementById('threeContainer'),scene=new THREE.Scene();
+scene.background=new THREE.Color(0x080c14);scene.fog=new THREE.FogExp2(0x080c14,.0003);
+const cam=new THREE.PerspectiveCamera(50,1,1,8000);cam.position.set(900,650,900);
+const ren=new THREE.WebGLRenderer({antialias:true});ren.setPixelRatio(Math.min(devicePixelRatio,2));ren.shadowMap.enabled=true;ren.shadowMap.type=THREE.PCFSoftShadowMap;ren.toneMapping=THREE.ACESFilmicToneMapping;ren.toneMappingExposure=1.1;tc.appendChild(ren.domElement);
+const ctrl=new OrbitControls(cam,ren.domElement);ctrl.enableDamping=true;ctrl.dampingFactor=.08;ctrl.maxPolarAngle=Math.PI/2.05;ctrl.minDistance=100;ctrl.maxDistance=2500;ctrl.target.set(0,50,0);
+scene.add(new THREE.AmbientLight(0x334455,1.2));
+const dL=new THREE.DirectionalLight(0xffeedd,2.5);dL.position.set(400,600,300);dL.castShadow=true;dL.shadow.mapSize.set(2048,2048);const sc=dL.shadow.camera;sc.near=10;sc.far=2000;sc.left=sc.bottom=-800;sc.right=sc.top=800;scene.add(dL);
+scene.add(new THREE.DirectionalLight(0x00ff88,.3).position.set(-300,200,-400));
+state.terrainData=genTD();
+const tG=new THREE.PlaneGeometry(TS,TS,TR-1,TR-1);tG.rotateX(-Math.PI/2);
+const ps=tG.attributes.position.array,vc=ps.length/3,cls=new Float32Array(vc*3);
+let mnH=Infinity,mxH=-Infinity;
+for(let i=0;i<vc;i++){const x=ps[i*3],z=ps[i*3+2],h=tH(x,z);ps[i*3+1]=h;if(h<mnH)mnH=h;if(h>mxH)mxH=h}
+const hR=Math.max(mxH-mnH,1);
+for(let i=0;i<vc;i++){const t=(ps[i*3+1]-mnH)/hR;let r,g,b;if(t<.3){const s=t/.3;r=.06+s*.1;g=.15+s*.35;b=.06+s*.05}else if(t<.6){const s=(t-.3)/.3;r=.16+s*.35;g=.5-s*.15;b=.11-s*.02}else{const s=(t-.6)/.4;r=.51+s*.35;g=.35+s*.45;b=.09+s*.55}cls[i*3]=r;cls[i*3+1]=g;cls[i*3+2]=b}
+tG.setAttribute('color',new THREE.BufferAttribute(cls,3));tG.computeVertexNormals();
+const tM=new THREE.Mesh(tG,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,metalness:.05}));tM.receiveShadow=true;scene.add(tM);
+const grd=new THREE.GridHelper(TS,20,0x1a2540,0x0f1623);grd.position.y=mnH-2;scene.add(grd);
+const aG=new THREE.Group();scene.add(aG);
+
+// === PERFIL CANVAS ===
+const pCv=document.getElementById('profileCanvas'),cx=pCv.getContext('2d'),pTt=document.getElementById('profileTooltip');
+function rsP(){const r=pCv.parentElement.getBoundingClientRect();pCv.width=r.width*devicePixelRatio;pCv.height=r.height*devicePixelRatio;pCv.style.width=r.width+'px';pCv.style.height=r.height+'px';cx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+
+pCv.addEventListener('mousemove',function(e){if(!state.analysisResult||!state.isAnalyzed)return;const r=pCv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,ar=state.analysisResult.profileArea;if(!ar||mx<ar.x||mx>ar.x+ar.w||my<ar.y||my>ar.y+ar.h){pTt.style.display='none';return}const t=(mx-ar.x)/ar.w,d=state.analysisResult.profileData.distances,idx=Math.min(Math.floor(t*d.length),d.length-1);pTt.style.display='block';pTt.style.left=(mx+12)+'px';pTt.style.top=(my-8)+'px';pTt.innerHTML=`<span style="color:var(--muted)">d:</span> ${(d[idx]/1000).toFixed(2)} km &nbsp;<span style="color:var(--muted)">h:</span> ${state.analysisResult.profileData.elevations[idx].toFixed(1)} m`});
+pCv.addEventListener('mouseleave',()=>pTt.style.display='none');
+
+/** Preview del terreno al 70% — centrado con marco decorativo */
+function drawPreviewProfile(){
+    rsP();
+    const W=pCv.width/devicePixelRatio,H=pCv.height/devicePixelRatio;
+
+    // Limpiar todo el canvas al color de fondo
+    cx.clearRect(0,0,W,H);
+    cx.fillStyle='#080c14';
+    cx.fillRect(0,0,W,H);
+
+    // Margenes base para ejes
+    const mg={top:28,right:25,bottom:42,left:68};
+    const baseW=W-mg.left-mg.right;
+    const baseH=H-mg.top-mg.bottom;
+
+    // Escala al 70% y centrar
+    const S=0.70;
+    const gW=baseW*S;
+    const gH=baseH*S;
+    const offX=(baseW-gW)/2;
+    const offY=(baseH-gH)/2;
+    const ox=mg.left+offX;
+    const oy=mg.top+offY;
+
+    // Extraer perfil central
+    const half=TS/2,pf=extProf(state.terrainData,-half,0,half,0,500);
+    const dists=pf.distances,elevs=pf.elevations;
+    const distMax=dists[dists.length-1]/1000;
+    const yMin=Math.min(...elevs)-15,yMax=Math.max(...elevs)+25,yR=Math.max(yMax-yMin,1);
+    const mX=d=>ox+(d/distMax)*gW;
+    const mY=h=>oy+gH-((h-yMin)/yR)*gH;
+
+    // Marco decorativo exterior sutil
+    cx.strokeStyle='#111827';
+    cx.lineWidth=1;
+    cx.strokeRect(ox-1,oy-1,gW+2,gH+2);
+
+    // Fondo del area reducida
+    cx.fillStyle='#0a0e17';
+    cx.fillRect(ox,oy,gW,gH);
+
+    // Grilla
+    cx.strokeStyle='#141d2f';cx.lineWidth=.4;
+    for(let i=0;i<=10;i++){const x=ox+(i/10)*gW;cx.beginPath();cx.moveTo(x,oy);cx.lineTo(x,oy+gH);cx.stroke()}
+    for(let i=0;i<=8;i++){const y=oy+(i/8)*gH;cx.beginPath();cx.moveTo(ox,y);cx.lineTo(ox+gW,y);cx.stroke()}
+
+    // Etiquetas ejes (escala de fuente reducida al 85%)
+    cx.fillStyle='#3b4559';cx.font='8px "JetBrains Mono",monospace';cx.textAlign='center';
+    for(let i=0;i<=10;i++)cx.fillText((i/10*distMax).toFixed(1),ox+(i/10)*gW,oy+gH+13);
+    cx.font='7px "JetBrains Mono",monospace';cx.textAlign='right';
+    for(let i=0;i<=8;i++)cx.fillText((yMax-(i/8)*yR).toFixed(0),ox-5,oy+(i/8)*gH+3);
+    cx.fillStyle='#2a3344';cx.font='8px "Space Grotesk",sans-serif';cx.textAlign='center';
+    cx.fillText('Distancia (km)',ox+gW/2,oy+gH+28);
+    cx.save();cx.translate(12,oy+gH/2);cx.rotate(-Math.PI/2);cx.fillText('Elevacion (m)',0,0);cx.restore();
+
+    // Terreno con gradiente mas sutil para preview
+    cx.beginPath();cx.moveTo(mX(0),mY(elevs[0]));
+    for(let i=1;i<dists.length;i++)cx.lineTo(mX(dists[i]/1000),mY(elevs[i]));
+    cx.lineTo(mX(distMax),mY(yMin));cx.lineTo(mX(0),mY(yMin));cx.closePath();
+    const tGr=cx.createLinearGradient(0,oy,0,oy+gH);
+    tGr.addColorStop(0,'#1a6b3a');tGr.addColorStop(.5,'#14532d');tGr.addColorStop(1,'#0a2e18');
+    cx.fillStyle=tGr;cx.fill();
+    cx.strokeStyle='#2dd46860';cx.lineWidth=1;cx.stroke();
+
+    // Linea de referencia horizontal
+    const refH=(yMin+yMax)/2;
+    cx.setLineDash([3,5]);cx.strokeStyle='#252f40';cx.lineWidth=.5;
+    cx.beginPath();cx.moveTo(ox,mY(refH));cx.lineTo(ox+gW,mY(refH));cx.stroke();
+    cx.setLineDash([]);
+
+    cx.font='7px "JetBrains Mono",monospace';cx.textAlign='left';cx.fillStyle='#2a3344';
+    cx.fillText(`${refH.toFixed(0)}m`,ox+3,mY(refH)-3);
+
+    // Rangos
+    cx.fillStyle='#1e293b';cx.font='7px "JetBrains Mono",monospace';cx.textAlign='right';
+    cx.fillText(`MIN ${Math.min(...elevs).toFixed(0)}m`,ox+gW-3,oy+gH-4);
+    cx.fillText(`MAX ${Math.max(...elevs).toFixed(0)}m`,ox+gW-3,oy+11);
+
+    // Borde del area de grafico
+    cx.strokeStyle='#1e293b';cx.lineWidth=1;cx.strokeRect(ox,oy,gW,gH);
+
+    // Label "PREVIEW" en la esquina del marco
+    cx.fillStyle='#1e293b';cx.font='bold 8px "JetBrains Mono",monospace';cx.textAlign='left';
+    cx.fillText('PREVIEW',ox+4,oy+11);
+}
+
+/** Perfil completo del analisis (al 100%) */
+function drawProfile(result){
+    const{distances,elevations,terrainAdjusted,losLine,fresnelUpper,fresnelLower,obstructions}=result.profileData;
+    rsP();
+    const W=pCv.width/devicePixelRatio,H=pCv.height/devicePixelRatio;
+    const mg={top:28,right:25,bottom:42,left:68},gW=W-mg.left-mg.right,gH=H-mg.top-mg.bottom;
+    state.analysisResult.profileArea={x:mg.left,y:mg.top,w:gW,h:gH};
+    const distMax=distances[distances.length-1]/1000;
+    const allV=[...terrainAdjusted,...fresnelUpper,losLine[0],losLine[losLine.length-1]];
+    const yMin=Math.min(...allV)-20,yMax=Math.max(...fresnelUpper)+25,yR=Math.max(yMax-yMin,1);
+    const mX=d=>mg.left+(d/distMax)*gW, mY=h=>mg.top+gH-((h-yMin)/yR)*gH;
+    cx.clearRect(0,0,W,H);
+    cx.fillStyle='#0a0e17';cx.fillRect(mg.left,mg.top,gW,gH);
+
+    cx.strokeStyle='#141d2f';cx.lineWidth=.5;
+    for(let i=0;i<=10;i++){const x=mg.left+(i/10)*gW;cx.beginPath();cx.moveTo(x,mg.top);cx.lineTo(x,mg.top+gH);cx.stroke()}
+    for(let i=0;i<=8;i++){const y=mg.top+(i/8)*gH;cx.beginPath();cx.moveTo(mg.left,y);cx.lineTo(mg.left+gW,y);cx.stroke()}
+
+    cx.fillStyle='#475569';cx.font='10px "JetBrains Mono",monospace';cx.textAlign='center';
+    for(let i=0;i<=10;i++)cx.fillText((i/10*distMax).toFixed(1),mg.left+(i/10)*gW,mg.top+gH+16);
+    cx.font='9px "JetBrains Mono",monospace';cx.textAlign='right';
+    for(let i=0;i<=8;i++)cx.fillText((yMax-(i/8)*yR).toFixed(0),mg.left-7,mg.top+(i/8)*gH+3);
+    cx.fillStyle='#334155';cx.font='9px "Space Grotesk",sans-serif';cx.textAlign='center';
+    cx.fillText('Distancia (km)',mg.left+gW/2,mg.top+gH+34);
+    cx.save();cx.translate(14,mg.top+gH/2);cx.rotate(-Math.PI/2);cx.fillText('Elevacion (m)',0,0);cx.restore();
+
+    cx.beginPath();
+    for(let i=0;i<distances.length;i++){const x=mX(distances[i]/1000);i===0?cx.moveTo(x,mY(fresnelUpper[i])):cx.lineTo(x,mY(fresnelUpper[i]))}
+    for(let i=distances.length-1;i>=0;i--)cx.lineTo(mX(distances[i]/1000),mY(fresnelLower[i]));
+    cx.closePath();cx.fillStyle='rgba(250,204,21,.13)';cx.fill();
+    cx.strokeStyle='rgba(250,204,21,.35)';cx.lineWidth=.7;cx.stroke();
+
+    let hasObs=false;cx.beginPath();let started=false;
+    for(let i=0;i<distances.length;i++){if(obstructions[i]){hasObs=true;const x=mX(distances[i]/1000);if(!started){cx.moveTo(x,mY(fresnelLower[i]));started=true}cx.lineTo(x,mY(terrainAdjusted[i]))}else if(started){cx.lineTo(mX(distances[Math.max(0,i-1)]/1000),mY(fresnelLower[Math.max(0,i-1)]));started=false}}
+    if(started)cx.lineTo(mX(distances[distances.length-1]/1000),mY(fresnelLower[distances.length-1]));
+    cx.closePath();if(hasObs){cx.fillStyle='rgba(239,68,68,.5)';cx.fill()}
+
+    cx.beginPath();cx.moveTo(mX(0),mY(terrainAdjusted[0]));
+    for(let i=1;i<distances.length;i++)cx.lineTo(mX(distances[i]/1000),mY(terrainAdjusted[i]));
+    cx.lineTo(mX(distMax),mY(yMin));cx.lineTo(mX(0),mY(yMin));cx.closePath();
+    const tGr=cx.createLinearGradient(0,mg.top,0,mg.top+gH);
+    tGr.addColorStop(0,'#22c55e');tGr.addColorStop(1,'#14532d');
+    cx.fillStyle=tGr;cx.fill();cx.strokeStyle='#4ade80';cx.lineWidth=1.8;cx.stroke();
+
+    cx.setLineDash([8,5]);cx.strokeStyle='#ef4444';cx.lineWidth=1.8;
+    cx.beginPath();cx.moveTo(mX(0),mY(losLine[0]));cx.lineTo(mX(distMax),mY(losLine[losLine.length-1]));cx.stroke();cx.setLineDash([]);
+
+    cx.strokeStyle='rgba(250,204,21,.4)';cx.lineWidth=.5;cx.setLineDash([3,3]);
+    [fresnelUpper,fresnelLower].forEach(a=>{cx.beginPath();for(let i=0;i<distances.length;i++){const x=mX(distances[i]/1000);i===0?cx.moveTo(x,mY(a[i])):cx.lineTo(x,mY(a[i]))}cx.stroke()});
+    cx.setLineDash([]);
+
+    const aA={x:mX(0),y:mY(losLine[0])},aB={x:mX(distMax),y:mY(losLine[losLine.length-1])},aH=16;
+    cx.lineWidth=2;
+    cx.strokeStyle='#f59e0b';cx.beginPath();cx.moveTo(aA.x,aA.y);cx.lineTo(aA.x,mY(terrainAdjusted[0]));cx.stroke();
+    cx.strokeStyle='#06b6d4';cx.beginPath();cx.moveTo(aB.x,aB.y);cx.lineTo(aB.x,mY(terrainAdjusted[terrainAdjusted.length-1]));cx.stroke();
+    [[aA,'#f59e0b'],[aB,'#06b6d4']].forEach(([a,c])=>{cx.fillStyle=c;cx.strokeStyle='#fff';cx.lineWidth=1;cx.beginPath();cx.moveTo(a.x,a.y-aH);cx.lineTo(a.x-6,a.y);cx.lineTo(a.x+6,a.y);cx.closePath();cx.fill();cx.stroke();cx.beginPath();cx.arc(a.x,a.y-aH,3,0,Math.PI*2);cx.fillStyle=c;cx.shadowColor=c;cx.shadowBlur=10;cx.fill();cx.shadowBlur=0});
+    cx.font='bold 11px "JetBrains Mono",monospace';cx.textAlign='center';
+    cx.fillStyle='#f59e0b';cx.fillText('A (Tx)',aA.x,aA.y-aH-8);
+    cx.fillStyle='#06b6d4';cx.fillText('B (Rx)',aB.x,aB.y-aH-8);
+    cx.strokeStyle='#1e293b';cx.lineWidth=1;cx.strokeRect(mg.left,mg.top,gW,gH);
+    if(!result.isViable){cx.fillStyle='rgba(239,68,68,.9)';cx.font='bold 12px "Space Grotesk",sans-serif';cx.textAlign='right';cx.fillText('OBSTRUCCION DETECTADA',mg.left+gW-12,mg.top+22)}
+}
+
+// === OBJETOS 3D ===
+function clr3D(){while(aG.children.length){const c=aG.children[0];if(c.geometry)c.geometry.dispose();if(c.material)(Array.isArray(c.material)?c.material:[c.material]).forEach(m=>m.dispose());aG.remove(c)}}
+function mkL(p1,p2,c){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...p1),new THREE.Vector3(...p2)]);return new THREE.Line(g,new THREE.LineBasicMaterial({color:c}))}
+function mkF(p1,p2,fG){const dr=new THREE.Vector3(p2[0]-p1[0],p2[1]-p1[1],p2[2]-p1[2]),dT=dr.length(),dTK=dT/1000;dr.normalize();let up=new THREE.Vector3(0,1,0);if(Math.abs(dr.dot(up))>.95)up.set(1,0,0);const e1=new THREE.Vector3().crossVectors(dr,up).normalize(),e2=new THREE.Vector3().crossVectors(dr,e1).normalize();const sg=60,rd=20,vt=[],ix=[];for(let i=0;i<=sg;i++){const t=i/sg,cx2=p1[0]+t*(p2[0]-p1[0]),cy=p1[1]+t*(p2[1]-p1[1]),cz=p1[2]+t*(p2[2]-p1[2]),r=calcFR(dTK,t*dTK,fG)*.6;for(let j=0;j<=rd;j++){const a=(j/rd)*Math.PI*2;vt.push(cx2+r*(Math.cos(a)*e1.x+Math.sin(a)*e2.x),cy+r*(Math.cos(a)*e1.y+Math.sin(a)*e2.y),cz+r*(Math.cos(a)*e1.z+Math.sin(a)*e2.z))}}for(let i=0;i<sg;i++)for(let j=0;j<rd;j++){const a=i*(rd+1)+j,b=a+1,c=(i+1)*(rd+1)+j,d=c+1;ix.push(a,c,b,b,c,d)}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vt,3));g.setIndex(ix);g.computeVertexNormals();return new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:0xfacc15,transparent:true,opacity:.18,side:THREE.DoubleSide,depthWrite:false,shininess:80}))}
+function mkA(p,c,h){const gr=new THREE.Group(),bs=new THREE.Vector3(...p),tp=new THREE.Vector3(p[0],p[1]+h,p[2]);gr.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([bs,tp]),new THREE.LineBasicMaterial({color:c})));const cg=new THREE.ConeGeometry(4,12,8);cg.translate(0,6,0);const cm=new THREE.MeshPhongMaterial({color:c,emissive:c,emissiveIntensity:.3});const cn=new THREE.Mesh(cg,cm);cn.position.copy(tp);gr.add(cn);const sg=new THREE.SphereGeometry(2.5,8,8);const sm=new THREE.MeshPhongMaterial({color:c,emissive:c,emissiveIntensity:.5});const sp=new THREE.Mesh(sg,sm);sp.position.copy(bs);gr.add(sp);return gr}
+
+// === CONSOLA ===
+const cO=document.getElementById('consoleOutput');let cOp=false;
+function logC(m,t='muted'){const l=document.createElement('div');l.className=`console-line console-${t} animate-in`;const ts=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),pf={info:'INF',success:'OK ',error:'ERR',muted:'---'}[t]||'---',cl={success:'var(--accent)',error:'var(--danger)',info:'var(--amber)',muted:'var(--border)'}[t];l.innerHTML=`<span style="color:var(--border)">[${ts}]</span> <span style="color:${cl}">${pf}</span> ${m}`;cO.appendChild(l);cO.scrollTop=cO.scrollHeight}
+window.clearConsole=function(){cO.innerHTML='';logC('Consola limpiada','muted')};
+window.toggleConsole=function(){cOp=!cOp;const e=document.getElementById('consoleOverlay'),b=document.getElementById('btnToggleConsole');if(cOp){e.classList.add('open');b.style.borderColor='var(--accent)';b.style.color='var(--accent)'}else{e.classList.remove('open');b.style.borderColor='var(--border)';b.style.color='var(--muted)'}};
+
+// === ANALISIS ===
+window.runAnalysis=function(){
+    const btn=document.getElementById('btnCalculate');btn.disabled=true;
+    const latA=parseFloat(document.getElementById('latA').value),lonA=parseFloat(document.getElementById('lonA').value),latB=parseFloat(document.getElementById('latB').value),lonB=parseFloat(document.getElementById('lonB').value);
+    if([latA,lonA,latB,lonB].some(isNaN)){logC('Coordenadas invalidas','error');btn.disabled=false;return}
+    const freq=parseFloat(document.getElementById('frequency').value)||5,hA=parseFloat(document.getElementById('heightA').value)||30,hB=parseFloat(document.getElementById('heightB').value)||30,gA=parseFloat(document.getElementById('gainA').value)||30,gB=parseFloat(document.getElementById('gainB').value)||30,sens=parseFloat(document.getElementById('sensitivity').value)||-80,kF=parseFloat(document.getElementById('kFactor').value)||1.333;
+    logC('Iniciando analisis...','info');logC(`Freq:${freq}GHz hA:${hA}m hB:${hB}m K:${kF}`,'muted');
+    const distM=haversine(latA,lonA,latB,lonB),distKm=distM/1000;logC(`Distancia: ${distKm.toFixed(3)} km`,'info');
+    const hD=TS*.4,tD=Math.min(distM,hD*2),sX=-tD/2,sZ=-tD/2;
+    const elA=sE(state.terrainData,sX,sZ),elB=sE(state.terrainData,sX+tD,sZ);
+    logC(`Elev A:${elA.toFixed(1)}m B:${elB.toFixed(1)}m`,'muted');
+    const N=400,pf=extProf(state.terrainData,sX,sZ,sX+tD,sZ,N),rD=pf.distances.map(d=>(d/Math.max(tD,1))*distM);
+    const fspl=calcFSPL(distKm,freq);logC(`FSPL: ${fspl.toFixed(2)} dB`,'info');
+    const tA=[],lo=[],fU=[],fL=[],ob=[];let via=true,mxO=0;const eA=elA+hA,eB=elB+hB;
+    for(let i=0;i<N;i++){const dK=rD[i]/1000,t=i/(N-1);tA.push(pf.elevations[i]-eDrop(dK,kF));const l=eA+t*(eB-eA);lo.push(l);const fr=calcFR(distKm,dK,freq)*.6;fU.push(l+fr);fL.push(l-fr);const io=tA[i]>fL[i];ob.push(io);if(io){via=false;mxO=Math.max(mxO,tA[i]-fL[i])}}
+    const rxP=gA+gB-fspl,mg2=rxP-sens;
+    logC(`Ganancia:${(gA+gB).toFixed(1)}dBi Rx:${rxP.toFixed(2)}dBm`,'muted');
+    logC(`Margen:${mg2.toFixed(2)}dB`,mg2>0?'success':'error');
+    if(via)logC('ENLACE VIABLE — Sin obstrucciones','success');
+    else logC(`ENLACE NO VIABLE — Obstruccion:${mxO.toFixed(1)}m`,'error');
+    state.analysisResult={isViable:via,fspl,distKm,rxP,margin:mg2,maxObs:mxO,params:{freq,hA,hB,gA,gB,sens,kF},profileData:{distances:rD,elevations:pf.elevations,terrainAdjusted:tA,losLine:lo,fresnelUpper:fU,fresnelLower:fL,obstructions:ob}};
+    state.isAnalyzed=true;
+    updBg(via);updSm(distKm,fspl,rxP,mg2,mxO,via);
+    document.getElementById('profilePlaceholder').style.display='none';
+    drawProfile(state.analysisResult);
+    clr3D();
+    const pA=[sX,elA,sZ],pB=[sX+tD,elB,sZ],pAT=[sX,elA+hA,sZ],pBT=[sX+tD,elB+hB,sZ];
+    aG.add(mkL(pAT,pBT,0xef4444));aG.add(mkF(pAT,pBT,freq));aG.add(mkA(pA,0xf59e0b,hA));aG.add(mkA(pB,0x06b6d4,hB));aG.add(mkL(pA,pB,0x334155));
+    ctrl.target.set((pAT[0]+pBT[0])/2,(pAT[1]+pBT[1])/2,(pAT[2]+pBT[2])/2);
+    logC('Vista 3D actualizada. Listo.','success');btn.disabled=false
+};
+function updBg(v){const b=document.getElementById('statusBadge'),t=document.getElementById('statusText');b.className=`status-badge ${v?'status-viable':'status-failed'}`;t.textContent=v?'Enlace Viable':'No Viable'}
+function updSm(d,f,rx,mg,o,v){document.getElementById('quickSummary').classList.remove('hidden');document.getElementById('sumDist').textContent=d.toFixed(3)+' km';document.getElementById('sumFSPL').textContent=f.toFixed(2)+' dB';document.getElementById('sumRx').textContent=rx.toFixed(2)+' dBm';const me=document.getElementById('sumMargin');me.textContent=mg.toFixed(2)+' dB';me.style.color=mg>0?'var(--accent)':'var(--danger)';const oe=document.getElementById('sumObs');oe.textContent=v?'Ninguna':o.toFixed(1)+' m';oe.style.color=v?'var(--accent)':'var(--danger)'}
+
+// === RESIZE & LOOP ===
+function onR(){const r=tc.getBoundingClientRect();if(r.width>0&&r.height>0){cam.aspect=r.width/r.height;cam.updateProjectionMatrix();ren.setSize(r.width,r.height)}if(state.isAnalyzed&&state.analysisResult)drawProfile(state.analysisResult);else drawPreviewProfile()}
+window.addEventListener('resize',onR);new ResizeObserver(onR).observe(tc);
+setTimeout(()=>{onR();drawPreviewProfile()},120);
+
+function animate(){requestAnimationFrame(animate);ctrl.update();const fc=aG.children.find(c=>c.isMesh&&c.material&&c.material.opacity<.5);if(fc)fc.material.opacity=.14+.04*Math.sin(Date.now()*.002);ren.render(scene,cam)}
+animate();
+
+logC('UptaLink v1.0 — Motor de Radioenlaces','info');
+logC('Terreno 2km x 2km | 250x250 vertices','muted');
+logC('Clic en mapa = seleccionar puntos','info');
+logC('Presione Analizar para calcular','muted');
+</script>
+</body>
+</html>
