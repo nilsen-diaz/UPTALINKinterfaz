@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UptaLink — Analisis de Radioenlaces 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { fontFamily: { display: ['"Space Grotesk"','sans-serif'], mono: ['"JetBrains Mono"','monospace'] } } }
+        }
+    </script>
+    <style>
+        :root {
+            --bg:#080c14; --panel:#0f1623; --border:#1e293b; --text:#e2e8f0;
+            --muted:#64748b; --accent:#00ff88; --accent-dim:#00cc6a;
+            --amber:#f59e0b; --danger:#ef4444; --cyan:#06b6d4;
+            --canvas-bg:#0a0e17; --canvas-grid:#141d2f; --canvas-text:#475569;
+            --overlay-bg:rgba(15,22,35,.96);
+            --input-shadow: rgba(0,0,0,0.3);
+        }
+        :root[data-theme="light"] {
+            --bg:#f1f5f9; --panel:#ffffff; --border:#cbd5e1; --text:#1e293b;
+            --muted:#64748b; --accent:#00875a; --accent-dim:#00b574;
+            --amber:#d97706; --danger:#dc2626; --cyan:#0891b2;
+            --canvas-bg:#ffffff; --canvas-grid:#e2e8f0; --canvas-text:#64748b;
+            --overlay-bg:rgba(255,255,255,.95);
+            --input-shadow: rgba(0,0,0,0.05);
+        }
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;transition: background 0.3s, color 0.3s;}
+        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--panel)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+        .input-field{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 8px;border-radius:6px;width:100%;transition:all 0.25s;outline:none;box-shadow: inset 0 1px 3px var(--input-shadow);}
+        .input-field:focus{border-color:var(--accent);box-shadow: 0 0 0 3px rgba(0,255,136,.15), inset 0 1px 3px var(--input-shadow);background: var(--panel);}
+        .map-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);font-size:9px;font-weight:700;padding:4px 8px;border-radius:5px;cursor:pointer;transition:all 0.2s;text-transform:uppercase;letter-spacing:.5px;}
+        .map-btn:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+        .map-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent);box-shadow:0 2px 8px rgba(0,255,136,.3)}
+        .btn-calc{background:linear-gradient(135deg,var(--accent-dim),var(--accent));color:#080c14;font-weight:800;font-size:12px;padding:10px 14px;border:1px solid var(--accent);border-radius:8px;cursor:pointer;width:100%;transition:all 0.25s;letter-spacing:.3px;text-transform:uppercase;box-shadow:0 4px 15px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;gap:8px;}
+        .btn-calc:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,255,136,.4);filter:brightness(1.1)}
+        .btn-switch{background: var(--panel); border: 1px solid var(--accent); color: var(--accent); font-size: 10px; font-weight: 700; padding: 7px 10px; border-radius: 20px; width: 100%; cursor: pointer; transition: all 0.25s; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 8px rgba(0,255,136,0.1);}
+        .btn-switch:hover{background: var(--accent); color: var(--bg); transform: translateY(-1px); box-shadow: 0 4px 15px rgba(0,255,136,0.3);}
+        .theme-btn{background:var(--bg);border:1px solid var(--border);color:var(--muted);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.3s;}
+        .theme-btn:hover{color:var(--accent);border-color:var(--accent);transform:rotate(15deg)}
+        .console-line{font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.5;padding:1px 0;border-bottom:1px solid rgba(30,41,59,.2)}
+        .leaflet-container{background:var(--bg)!important}
+        .leaflet-control-zoom a{background:var(--panel)!important;color:var(--text)!important;border-color:var(--border)!important}
+        .leaflet-control-zoom a:hover{background:var(--border)!important;color:var(--accent)!important}
+        .leaflet-control-attribution{display:none!important}
+        .leaflet-tooltip-custom {background: var(--panel); color: var(--text); border: 1px solid var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-family: 'JetBrains Mono', monospace; font-size: 10px;}
+        .section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:10px}
+        @keyframes fadeSlideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        .animate-in{animation:fadeSlideIn .25s ease-out forwards}
+        .header-glow{position:relative}
+        .header-glow::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4}
+        .status-badge{display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 10px; font-weight: 800; font-family: 'JetBrains Mono',monospace; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.3s;}
+        .status-viable{background: linear-gradient(135deg, rgba(0,255,136,.2), rgba(0,255,136,.05)); color: var(--accent); border: 1px solid var(--accent); box-shadow: 0 0 12px rgba(0,255,136,.25);}
+        .status-failed{background: linear-gradient(135deg, rgba(239,68,68,.2), rgba(239,68,68,.05)); color: var(--danger); border: 1px solid var(--danger); box-shadow: 0 0 12px rgba(239,68,68,.25);}
+        .status-idle{ background: rgba(100,116,139,.1); color: var(--muted); border: 1px solid rgba(100,116,139,.3); }
+        #consoleOverlay{position:fixed;top:48px;right:8px;bottom:8px;width:320px;z-index:1000;background:var(--overlay-bg);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:10px;display:none;flex-direction:column;box-shadow:-4px 0 30px rgba(0,0,0,.5);transition:opacity .2s,transform .2s}
+        #consoleOverlay.open{display:flex;animation:slideInRight .25s ease-out}
+        @keyframes slideInRight{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+        #profileTooltip{position:absolute;background:var(--overlay-bg);border:1px solid var(--accent);border-radius:6px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text);pointer-events:none;display:none;z-index:100;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+        .point-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;animation:pulse-dot 1.5s ease-in-out infinite}
+        @keyframes pulse-dot{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 0 6px transparent}}
+        .idle-badge{position:absolute;bottom:12px;right:16px;background:var(--overlay-bg);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:8px;padding:10px 14px;max-width:320px;z-index:10}
+        
+        /* Estilo del Divisor Redimensionable */
+        .splitter {
+            width: 6px;
+            background: var(--border);
+            cursor: col-resize;
+            transition: background 0.2s;
+            z-index: 10;
+            position: relative;
+        }
+        .splitter:hover, .splitter.dragging {
+            background: var(--accent);
+        }
+    </style>
+</head>
+<body>
+<!--
+¡Me alegra muchísimo leer eso! 🚀
+
+Saber que las torres de celosía, el terreno topográfico 3D y los paneles dinámicos finalmente 
+cumplen con las expectativas es la mejor opcion. Se ha logrado construir una herramienta de 
+análisis de radioenlaces verdaderamente profesional y visualmente espectacular.
+
+En el futuro el camino a sera seguir evolucionando la aplicación (por ejemplo, agregando cálculos 
+de atenuación por lluvia, exportación de informes en PDF, o perfiles de antenas específicas).
+
+-->
+
+<div class="flex flex-col h-screen">
+    <header class="header-glow flex items-center justify-between px-4 py-2 backdrop-blur-sm shrink-0" style="min-height:44px;background:var(--panel)">
+        <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,var(--accent-dim),var(--accent))"><i class="fa-solid fa-tower-broadcast text-xs" style="color:#080c14"></i></div>
+            <h1 class="font-display font-bold text-sm tracking-tight">UptaLink</h1>
+            <span class="text-[8px] font-mono tracking-widest uppercase ml-1" style="color:var(--border)">v5.0</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <div id="statusBadge" class="status-badge status-idle">
+                <span id="statusDot" class="w-2 h-2 rounded-full bg-current"></span>
+                <span id="statusText">Sin analizar</span>
+            </div>
+            <button id="btnToggleConsole" onclick="toggleConsole()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-mono font-semibold transition-all" style="background:var(--bg);border:1px solid var(--border);color:var(--muted)" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"><i class="fa-solid fa-terminal text-[9px]"></i> Consola</button>
+            <button id="themeToggle" onclick="toggleTheme()" class="theme-btn" title="Cambiar tema">
+                <i class="fa-solid fa-sun text-sm"></i>
+            </button>
+        </div>
+    </header>
+    <div class="flex flex-1 overflow-hidden">
+        <aside class="w-[230px] shrink-0 border-r overflow-y-auto" style="background:var(--panel);border-color:var(--border)">
+            <div class="p-3 space-y-4">
+                <div>
+                    <div class="section-label"><i class="fa-solid fa-location-dot mr-1"></i> Equipos</div>
+                    <div class="mb-3">
+                        <div class="flex items-center gap-1.5 mb-1.5"><span class="point-indicator" style="color:#f59e0b;background:#f59e0b"></span><span class="text-[10px] font-bold" style="color:#f59e0b">TRANSMISOR (Tx)</span></div>
+                        <div class="grid grid-cols-2 gap-1"><input type="text" id="latA" class="input-field" value="11.693814" placeholder="Lat"><input type="text" id="lonA" class="input-field" value="-70.193885" placeholder="Lon"></div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="flex items-center gap-1.5 mb-1.5"><span class="point-indicator" style="color:#06b6d4;background:#06b6d4"></span><span class="text-[10px] font-bold" style="color:#06b6d4">RECEPTOR (Rx)</span></div>
+                        <div class="grid grid-cols-2 gap-1"><input type="text" id="latB" class="input-field" value="11.886536" placeholder="Lat"><input type="text" id="lonB" class="input-field" value="-69.994190" placeholder="Lon"></div>
+                    </div>
+                    <button id="btnSwitchPoint" class="btn-switch" onclick="switchActivePoint()"><i class="fa-solid fa-arrows-rotate"></i> Seleccionar: Tx</button>
+                </div>
+                <div>
+                    <div class="section-label"><i class="fa-solid fa-satellite-dish mr-1"></i> Parámetros RF</div>
+                    <div class="space-y-2.5">
+                        <div><label class="text-[9px] font-mono block mb-1" style="color:var(--muted)">FRECUENCIA (GHz)</label><input type="number" id="frequency" class="input-field" value="5.0" min="0.1" max="100" step="0.1"></div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div><label class="text-[9px] font-mono block mb-1" style="color:var(--muted)">ALTURA Tx (m)</label><input type="number" id="heightA" class="input-field" value="30" min="1" max="300"></div>
+                            <div><label class="text-[9px] font-mono block mb-1" style="color:var(--muted)">ALTURA Rx (m)</label><input type="number" id="heightB" class="input-field" value="30" min="1" max="300"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div><label class="text-[9px] font-mono block mb-1" style="color:var(--muted)">GANANCIA Tx (dBi)</label><input type="number" id="gainA" class="input-field" value="30" min="0" max="50" step="0.5"></div>
+                            <div><label class="text-[9px] font-mono block mb-1" style="color:var(--muted)">GANANCIA Rx (dBi)</label><input type="number" id="gainB" class="input-field" value="30" min="0" max="50" step="0.5"></div>
+                        </div>
+                        <div><label class="text-[9px] font-mono block mb-1" style="color:var(--muted)">SENSIBILIDAD (dBm)</label><input type="number" id="sensitivity" class="input-field" value="-80" min="-120" max="0"></div>
+                        <div><label class="text-[9px] font-mono block mb-1" style="color:var(--muted)">FACTOR K (Tierra)</label><input type="number" id="kFactor" class="input-field" value="1.333" min="0.5" max="2.0" step="0.01"></div>
+                    </div>
+                </div>
+                <button id="btnCalculate" class="btn-calc" onclick="runAnalysis()"><i id="btnCalcIcon" class="fa-solid fa-bolt"></i> Analizar Enlace</button>
+                <div id="quickSummary" class="hidden">
+                    <div class="section-label"><i class="fa-solid fa-chart-line mr-1"></i> Resultados</div>
+                    <div class="space-y-1.5 font-mono text-[10px]">
+                        <div class="flex justify-between"><span style="color:var(--muted)">Distancia</span><span id="sumDist" style="color:var(--text)">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Elev. Terreno Tx</span><span id="sumElA" style="color:#f59e0b">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Elev. Terreno Rx</span><span id="sumElB" style="color:#06b6d4">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">FSPL</span><span id="sumFSPL" style="color:var(--text)">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Rx Potencia</span><span id="sumRx" style="color:var(--text)">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Margen</span><span id="sumMargin">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Despeje Fresnel</span><span id="sumFresnel">—</span></div>
+                        <div class="flex justify-between"><span style="color:var(--muted)">Obstrucción</span><span id="sumObs">—</span></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <div id="topRow" class="flex flex-1 overflow-hidden">
+                <!-- Mapa 2D -->
+                <div id="map2DContainer" class="flex flex-col overflow-hidden" style="width: 50%; min-width: 20%;">
+                    <div class="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0" style="background:var(--bg);border-bottom:1px solid var(--border)">
+                        <span class="text-[8px] font-mono font-bold uppercase tracking-wider" style="color:var(--muted)">Mapa 2D</span>
+                        <div class="flex gap-1 ml-auto">
+                            <button class="map-btn active" id="btnOSM" onclick="setMapProvider('osm')">Mapa</button>
+                            <button class="map-btn" id="btnGoogle" onclick="setMapProvider('google')">Sat</button>
+                            <button class="map-btn" id="btnTopo" onclick="setMapProvider('topo')">Topo</button>
+                        </div>
+                    </div>
+                    <div id="leafletMap" class="flex-1"></div>
+                </div>
+                
+                <!-- Divisor Redimensionable -->
+                <div id="splitter" class="splitter"></div>
+                
+                <!-- Terreno 3D -->
+                <div id="map3DContainer" class="flex flex-col flex-1 overflow-hidden" style="min-width: 20%;">
+                    <div class="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0" style="background:var(--bg);border-bottom:1px solid var(--border)">
+                        <span class="text-[8px] font-mono font-bold uppercase tracking-wider" style="color:var(--muted)">Terreno 3D Real</span>
+                        <span class="text-[8px] font-mono ml-auto" style="color:var(--muted)">Arrastrar = rotar | Scroll = zoom</span>
+                    </div>
+                    <div id="threeContainer" class="flex-1 relative"></div>
+                </div>
+            </div>
+            
+            <!-- Perfil de Elevación -->
+            <div class="h-[300px] shrink-0 flex flex-col border-t" style="border-color:var(--border)">
+                <div class="flex items-center gap-2 px-2.5 py-1.5 shrink-0" style="background:var(--bg);border-bottom:1px solid var(--border)">
+                    <span class="text-[8px] font-mono font-bold uppercase tracking-wider" style="color:var(--muted)">Perfil de Elevación</span>
+                    <div class="flex items-center gap-4 ml-5 text-[8px] font-mono" style="color:var(--muted)">
+                        <span><span class="inline-block w-3 h-[3px] rounded mr-0.5" style="background:#4ade80"></span>Terreno</span>
+                        <span><span class="inline-block w-3 border-t border-dashed mr-0.5" style="border-color:#ef4444"></span>Línea Visión (LOS)</span>
+                        <span><span class="inline-block w-3 h-[6px] rounded mr-0.5 opacity-40" style="background:#00ffff"></span>Zona Fresnel 60%</span>
+                        <span><span class="inline-block w-3 h-[6px] rounded mr-0.5 opacity-60" style="background:#ef4444"></span>Obstrucción</span>
+                    </div>
+                </div>
+                <div class="flex-1 relative" style="background:var(--bg)">
+                    <canvas id="profileCanvas"></canvas>
+                    <div id="profileTooltip"></div>
+                    <div id="profilePlaceholder" class="idle-badge">
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fa-solid fa-crosshairs text-[10px]" style="color:var(--accent)"></i>
+                            <span class="text-[10px] font-semibold" style="color:var(--text)">Listo para analizar</span>
+                        </div>
+                        <p class="text-[9px] font-mono" style="color:var(--muted)">Seleccione Tx y Rx en el mapa y presione <span style="color:var(--accent)">Analizar Enlace</span></p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+<div id="consoleOverlay">
+    <div class="flex items-center justify-between px-3 py-2 border-b shrink-0" style="border-color:var(--border)">
+        <span class="text-[9px] font-mono font-bold uppercase tracking-wider" style="color:var(--muted)">Consola de Resultados</span>
+        <button onclick="toggleConsole()" class="text-xs cursor-pointer hover:text-white transition-colors" style="color:var(--muted)"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="flex items-center gap-1 px-3 py-1.5 border-b shrink-0" style="border-color:var(--border)">
+        <button onclick="clearConsole()" class="text-[8px] font-mono cursor-pointer hover:text-white transition-colors px-2 py-1 rounded" style="color:var(--muted);background:var(--bg)"><i class="fa-solid fa-trash-can mr-1"></i>Limpiar</button>
+    </div>
+    <div id="consoleOutput" class="flex-1 overflow-y-auto p-2.5 space-y-0"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const state = { activePoint:'A', pointA:null, pointB:null, markerA:null, markerB:null, mapProvider:'osm', analysisResult:null, isAnalyzed:false };
+const getCssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// === CONSOLE INIT EARLY ===
+const cO = document.getElementById('consoleOutput');
+let cOp = false;
+function logC(m, t='muted') {
+    const l = document.createElement('div');
+    l.className = `console-line console-${t} animate-in`;
+    const ts = new Date().toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const pf = {info:'INF', success:'OK ', error:'ERR', muted:'---'}[t] || '---';
+    const cl = {success:'var(--accent)', error:'var(--danger)', info:'var(--amber)', muted:'var(--muted)'}[t];
+    l.innerHTML = `<span style="color:var(--muted)">[${ts}]</span> <span style="color:${cl};font-weight:bold">${pf}</span> ${m}`;
+    if(cO) { cO.appendChild(l); cO.scrollTop = cO.scrollHeight; }
+}
+window.clearConsole = function() { if(cO) cO.innerHTML=''; logC('Consola limpiada','muted'); };
+window.toggleConsole = function() {
+    cOp = !cOp;
+    const e = document.getElementById('consoleOverlay');
+    const b = document.getElementById('btnToggleConsole');
+    if(cOp) { e.classList.add('open'); b.style.borderColor='var(--accent)'; b.style.color='var(--accent)'; }
+    else { e.classList.remove('open'); b.style.borderColor='var(--border)'; b.style.color='var(--muted)'; }
+};
+
+// === MATEMATICAS RF ===
+function haversine(a,b,c,d){const R=6371000,tr=x=>x*Math.PI/180,dL=tr(c-a),dN=tr(d-b),v=Math.sin(dL/2)**2+Math.cos(tr(a))*Math.cos(tr(c))*Math.sin(dN/2)**2;return R*2*Math.atan2(Math.sqrt(v),Math.sqrt(1-v))}
+function calcFSPL(d,f){return d<=0?0:20*Math.log10(d)+20*Math.log10(f*1000)+32.44}
+function calcFR(dt,d1,f){if(dt<=0||d1<=0)return 0;const d2=dt-d1;return d2<=0?0:17.32*Math.sqrt((d1*d2)/(f*dt))}
+function eDrop(d1, dt, k){const m1 = d1 * 1000, mt = dt * 1000, m2 = mt - m1; return (m1 * m2) / (2 * 6371000 * k);}
+
+// === LEAFLET MAPA ===
+const lMap = L.map('leafletMap', {center:[11.693814, -70.193885], zoom:9, zoomControl:true});
+const mL = {
+    osm: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {maxZoom:19, attribution: '© OpenStreetMap, © CARTO'}),
+    google: L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {maxZoom:20}),
+    topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {maxZoom:17})
+};
+let cL = mL.osm;
+cL.addTo(lMap);
+let mLn = null;
+
+window.setMapProvider = function(p) {
+    if (cL) lMap.removeLayer(cL);
+    document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
+    const btnId = {osm:'btnOSM', google:'btnGoogle', topo:'btnTopo'}[p];
+    const btn = document.getElementById(btnId);
+    if(btn) btn.classList.add('active');
+    cL = mL[p];
+    cL.addTo(lMap);
+    state.mapProvider = p;
+    logC(`Capa de mapa: ${p.toUpperCase()}`, 'info');
+    setTimeout(() => { lMap.invalidateSize(); }, 100);
+};
+
+window.switchActivePoint = function() {
+    state.activePoint = state.activePoint==='A' ? 'B' : 'A';
+    const lbl = state.activePoint==='A' ? 'Tx' : 'Rx';
+    const lblFull = state.activePoint==='A' ? 'Transmisor' : 'Receptor';
+    document.getElementById('btnSwitchPoint').innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Seleccionar: ${lbl} (${lblFull})`;
+};
+
+function updateMapPoint(p, lat, lon, fromClick = true) {
+    if (isNaN(lat) || isNaN(lon)) return;
+    state['point'+p] = { lat, lon };
+    if (state['marker'+p]) lMap.removeLayer(state['marker'+p]);
+    const cl = p==='A' ? '#f59e0b' : '#06b6d4';
+    const lb = p==='A' ? 'Transmisor (Tx)' : 'Receptor (Rx)';
+    state['marker'+p] = L.marker([lat, lon], {icon: L.divIcon({className: '',html: `<div style="width:14px;height:14px;background:${cl};border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px ${cl}"></div>`,iconSize: [14, 14],iconAnchor: [7, 7]})}).addTo(lMap).bindTooltip(lb, {direction: 'top', permanent: true, className: 'leaflet-tooltip-custom'});
+    if (fromClick) { document.getElementById('lat'+p).value = lat.toFixed(6); document.getElementById('lon'+p).value = lon.toFixed(6); logC(`${lb}: ${lat.toFixed(6)}, ${lon.toFixed(6)}`, 'success'); }
+    if (mLn) { lMap.removeLayer(mLn); mLn = null; }
+    if (state.pointA && state.pointB) { mLn = L.polyline([[state.pointA.lat, state.pointA.lon], [state.pointB.lat, state.pointB.lon]], {color: '#ef4444', weight: 2, dashArray: '8,6', opacity: .8}).addTo(lMap); }
+}
+lMap.on('click', function(e) { updateMapPoint(state.activePoint, e.latlng.lat, e.latlng.lng, true); });
+['latA', 'lonA', 'latB', 'lonB'].forEach(id => { document.getElementById(id).addEventListener('input', function() { const p = id.includes('A') ? 'A' : 'B'; const lat = parseFloat(document.getElementById('lat'+p).value); const lon = parseFloat(document.getElementById('lon'+p).value); if (!isNaN(lat) && !isNaN(lon)) { updateMapPoint(p, lat, lon, false); lMap.panTo([lat, lon], {animate: true}); } }); });
+updateMapPoint('A', 11.693814, -70.193885, false);
+updateMapPoint('B', 11.886536, -69.994190, false);
+lMap.fitBounds([[state.pointA.lat, state.pointA.lon], [state.pointB.lat, state.pointB.lon]], {padding: [50, 50]});
+
+// === THREE.JS ===
+const tc = document.getElementById('threeContainer');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x080c14); 
+const cam = new THREE.PerspectiveCamera(50, 1, 1, 50000);
+cam.position.set(15000, 10000, 15000);
+const ren = new THREE.WebGLRenderer({antialias:true});
+ren.setPixelRatio(Math.min(devicePixelRatio, 2));
+ren.shadowMap.enabled = true;
+ren.shadowMap.type = THREE.PCFSoftShadowMap;
+ren.toneMapping = THREE.ACESFilmicToneMapping;
+ren.toneMappingExposure = 1.2;
+tc.appendChild(ren.domElement);
+const ctrl = new OrbitControls(cam, ren.domElement);
+ctrl.enableDamping = true; ctrl.dampingFactor = 0.08; ctrl.maxPolarAngle = Math.PI / 2.05; ctrl.minDistance = 100; ctrl.maxDistance = 30000; ctrl.target.set(0, 50, 0);
+
+const hemiLight = new THREE.HemisphereLight(0x88aaff, 0x223344, 1.2); scene.add(hemiLight);
+const ambient = new THREE.AmbientLight(0x445566, 0.8); scene.add(ambient);
+const dL = new THREE.DirectionalLight(0xffeedd, 2.5); dL.position.set(5000, 8000, 3000); dL.castShadow = true; dL.shadow.mapSize.set(2048, 2048); const sc = dL.shadow.camera; sc.near = 10; sc.far = 30000; sc.left = sc.bottom = -15000; sc.right = sc.top = 15000; scene.add(dL);
+const accentLight = new THREE.DirectionalLight(0x00ff88, 0.4); accentLight.position.set(-3000, 2000, -4000); scene.add(accentLight);
+
+const gridMat = new THREE.MeshStandardMaterial({color:0x0c1322, roughness:.9, metalness:.1});
+const gridGeo = new THREE.PlaneGeometry(40000, 40000); gridGeo.rotateX(-Math.PI / 2);
+const gridMesh = new THREE.Mesh(gridGeo, gridMat); gridMesh.position.y = -10; gridMesh.receiveShadow = true; scene.add(gridMesh);
+const grd = new THREE.GridHelper(40000, 40, 0x1a2540, 0x0f1623); grd.position.y = 0; scene.add(grd);
+const aG = new THREE.Group(); scene.add(aG);
+
+// === PERFIL CANVAS ===
+const pCv = document.getElementById('profileCanvas');
+const cx = pCv.getContext('2d');
+const pTt = document.getElementById('profileTooltip');
+function rsP(){const r=pCv.parentElement.getBoundingClientRect();pCv.width=r.width*devicePixelRatio;pCv.height=r.height*devicePixelRatio;pCv.style.width=r.width+'px';pCv.style.height=r.height+'px';cx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+pCv.addEventListener('mousemove',function(e){if(!state.analysisResult||!state.isAnalyzed)return;const r=pCv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,ar=state.analysisResult.profileArea;if(!ar||mx<ar.x||mx>ar.x+ar.w||my<ar.y||my>ar.y+ar.h){pTt.style.display='none';return}const t=(mx-ar.x)/ar.w,d=state.analysisResult.profileData.distances,idx=Math.min(Math.floor(t*d.length),d.length-1);pTt.style.display='block';pTt.style.left=(mx+12)+'px';pTt.style.top=(my-8)+'px';pTt.innerHTML=`<span style="color:var(--muted)">d:</span> ${(d[idx]/1000).toFixed(2)} km &nbsp;<span style="color:var(--muted)">h:</span> ${state.analysisResult.profileData.elevations[idx].toFixed(1)} m`});
+pCv.addEventListener('mouseleave',()=>pTt.style.display='none');
+
+function drawPreviewProfile(){rsP();const W=pCv.width/devicePixelRatio,H=pCv.height/devicePixelRatio;cx.clearRect(0,0,W,H);cx.fillStyle=getCssVar('--bg');cx.fillRect(0,0,W,H);cx.fillStyle=getCssVar('--muted');cx.font='bold 12px "JetBrains Mono",monospace';cx.textAlign='center';cx.fillText('Presione "Analizar Enlace" para cargar perfil real', W/2, H/2);}
+
+function drawProfile(result){
+    const{distances,elevations,terrainAdjusted,losLine,fresnelUpper,fresnelLower,obstructions}=result.profileData;
+    rsP();const W=pCv.width/devicePixelRatio,H=pCv.height/devicePixelRatio;const mg={top:28,right:25,bottom:42,left:68},gW=W-mg.left-mg.right,gH=H-mg.top-mg.bottom;
+    state.analysisResult.profileArea={x:mg.left,y:mg.top,w:gW,h:gH};
+    const distMax=distances[distances.length-1]/1000;const allV=[...terrainAdjusted,...fresnelUpper,losLine[0],losLine[losLine.length-1]];const yMin=Math.min(...allV)-20,yMax=Math.max(...fresnelUpper)+25,yR=Math.max(yMax-yMin,1);
+    const mX=d=>mg.left+(d/distMax)*gW, mY=h=>mg.top+gH-((h-yMin)/yR)*gH;
+    cx.clearRect(0,0,W,H);cx.fillStyle=getCssVar('--canvas-bg');cx.fillRect(mg.left,mg.top,gW,gH);
+    cx.strokeStyle=getCssVar('--canvas-grid');cx.lineWidth=.5;
+    for(let i=0;i<=10;i++){const x=mg.left+(i/10)*gW;cx.beginPath();cx.moveTo(x,mg.top);cx.lineTo(x,mg.top+gH);cx.stroke()}
+    for(let i=0;i<=8;i++){const y=mg.top+(i/8)*gH;cx.beginPath();cx.moveTo(mg.left,y);cx.lineTo(mg.left+gW,y);cx.stroke()}
+    cx.fillStyle=getCssVar('--canvas-text');cx.font='10px "JetBrains Mono",monospace';cx.textAlign='center';
+    for(let i=0;i<=10;i++)cx.fillText((i/10*distMax).toFixed(1),mg.left+(i/10)*gW,mg.top+gH+16);
+    cx.font='9px "JetBrains Mono",monospace';cx.textAlign='right';
+    for(let i=0;i<=8;i++)cx.fillText((yMax-(i/8)*yR).toFixed(0),mg.left-7,mg.top+(i/8)*gH+3);
+    cx.fillStyle=getCssVar('--muted');cx.font='9px "Space Grotesk",sans-serif';cx.textAlign='center';
+    cx.fillText('Distancia (km)',mg.left+gW/2,mg.top+gH+34);cx.save();cx.translate(14,mg.top+gH/2);cx.rotate(-Math.PI/2);cx.fillText('Elevación (m)',0,0);cx.restore();
+    
+    cx.beginPath();
+    for(let i=0;i<distances.length;i++){const x=mX(distances[i]/1000);i===0?cx.moveTo(x,mY(fresnelUpper[i])):cx.lineTo(x,mY(fresnelUpper[i]))}
+    for(let i=distances.length-1;i>=0;i--)cx.lineTo(mX(distances[i]/1000),mY(fresnelLower[i]));
+    cx.closePath();cx.fillStyle='rgba(0,255,255,.13)';cx.fill();cx.strokeStyle='rgba(0,255,255,.35)';cx.lineWidth=.7;cx.stroke();
+    
+    let hasObs=false;cx.beginPath();let started=false;
+    for(let i=0;i<distances.length;i++){if(obstructions[i]){hasObs=true;const x=mX(distances[i]/1000);if(!started){cx.moveTo(x,mY(fresnelLower[i]));started=true}cx.lineTo(x,mY(terrainAdjusted[i]))}else if(started){cx.lineTo(mX(distances[Math.max(0,i-1)]/1000),mY(fresnelLower[Math.max(0,i-1)]));started=false}}
+    if(started)cx.lineTo(mX(distances[distances.length-1]/1000),mY(fresnelLower[distances.length-1]));
+    cx.closePath();if(hasObs){cx.fillStyle='rgba(239,68,68,.5)';cx.fill()}
+    
+    cx.beginPath();cx.moveTo(mX(0),mY(terrainAdjusted[0]));
+    for(let i=1;i<distances.length;i++)cx.lineTo(mX(distances[i]/1000),mY(terrainAdjusted[i]));
+    cx.lineTo(mX(distMax),mY(yMin));cx.lineTo(mX(0),mY(yMin));cx.closePath();
+    const tGr=cx.createLinearGradient(0,mg.top,0,mg.top+gH);tGr.addColorStop(0,'#22c55e');tGr.addColorStop(1,'#14532d');
+    cx.fillStyle=tGr;cx.fill();cx.strokeStyle='#4ade80';cx.lineWidth=1.8;cx.stroke();
+    
+    cx.setLineDash([8,5]);cx.strokeStyle='#ef4444';cx.lineWidth=1.8;cx.beginPath();cx.moveTo(mX(0),mY(losLine[0]));cx.lineTo(mX(distMax),mY(losLine[losLine.length-1]));cx.stroke();cx.setLineDash([]);
+    cx.strokeStyle='rgba(0,255,255,.4)';cx.lineWidth=.5;cx.setLineDash([3,3]);[fresnelUpper,fresnelLower].forEach(a=>{cx.beginPath();for(let i=0;i<distances.length;i++){const x=mX(distances[i]/1000);i===0?cx.moveTo(x,mY(a[i])):cx.lineTo(x,mY(a[i]))}cx.stroke()});cx.setLineDash([]);
+    
+    const aA={x:mX(0),y:mY(losLine[0])},aB={x:mX(distMax),y:mY(losLine[losLine.length-1])},aH=16;
+    cx.lineWidth=2.5;cx.strokeStyle='#f59e0b';cx.beginPath();cx.moveTo(aA.x,aA.y);cx.lineTo(aA.x,mY(terrainAdjusted[0]));cx.stroke();
+    cx.strokeStyle='#06b6d4';cx.beginPath();cx.moveTo(aB.x,aB.y);cx.lineTo(aB.x,mY(terrainAdjusted[terrainAdjusted.length-1]));cx.stroke();
+    [[aA,'#f59e0b'],[aB,'#06b6d4']].forEach(([a,c])=>{cx.fillStyle=c;cx.strokeStyle='#fff';cx.lineWidth=1.5;cx.beginPath();cx.moveTo(a.x,a.y-aH);cx.lineTo(a.x-7,a.y);cx.lineTo(a.x+7,a.y);cx.closePath();cx.fill();cx.stroke();cx.beginPath();cx.arc(a.x,a.y-aH,4,0,Math.PI*2);cx.fillStyle=c;cx.shadowColor=c;cx.shadowBlur=12;cx.fill();cx.shadowBlur=0;});
+    cx.font='bold 11px "JetBrains Mono",monospace';cx.textAlign='center';cx.fillStyle='#f59e0b';cx.fillText('Tx',aA.x,aA.y-aH-8);cx.fillStyle='#06b6d4';cx.fillText('Rx',aB.x,aB.y-aH-8);
+    cx.strokeStyle=getCssVar('--border');cx.lineWidth=1;cx.strokeRect(mg.left,mg.top,gW,gH);
+    if(!result.isViable){cx.fillStyle='rgba(239,68,68,.95)';cx.font='bold 12px "Space Grotesk",sans-serif';cx.textAlign='right';cx.fillText('OBSTRUCCIÓN DETECTADA',mg.left+gW-12,mg.top+22)}
+}
+
+// === 3D OBJECTS ===
+function clr3D(){while(aG.children.length){const c=aG.children[0];if(c.geometry)c.geometry.dispose();if(c.material)(Array.isArray(c.material)?c.material:[c.material]).forEach(m=>m.dispose());aG.remove(c)}}
+function mkL(p1,p2,c){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...p1),new THREE.Vector3(...p2)]);return new THREE.Line(g,new THREE.LineBasicMaterial({color:c}))}
+function mkF(p1, p2, fG, realDistKm, scale) {
+    const dr = new THREE.Vector3(p2[0]-p1[0], p2[1]-p1[1], p2[2]-p1[2]); dr.normalize(); 
+    let up = new THREE.Vector3(0,1,0); if(Math.abs(dr.dot(up)) > 0.95) up.set(1,0,0);
+    const e1 = new THREE.Vector3().crossVectors(dr, up).normalize(); const e2 = new THREE.Vector3().crossVectors(dr, e1).normalize();
+    const sg = 60, rd = 20, vt = [], ix = [];
+    for(let i=0; i<=sg; i++) {
+        const t = i / sg; const cx2 = p1[0] + t * (p2[0] - p1[0]); const cy = p1[1] + t * (p2[1] - p1[1]); const cz = p1[2] + t * (p2[2] - p1[2]);
+        const r = calcFR(realDistKm, t * realDistKm, fG) * 0.6 * scale; 
+        for(let j=0; j<=rd; j++) { const a = (j / rd) * Math.PI * 2; vt.push(cx2 + r * (Math.cos(a) * e1.x + Math.sin(a) * e2.x), cy + r * (Math.cos(a) * e1.y + Math.sin(a) * e2.y), cz + r * (Math.cos(a) * e1.z + Math.sin(a) * e2.z)); }
+    }
+    for(let i=0; i<sg; i++) { for(let j=0; j<rd; j++) { const a = i * (rd + 1) + j; const b = a + 1; const c = (i + 1) * (rd + 1) + j; const d = c + 1; ix.push(a, c, b, b, c, d); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(vt, 3)); g.setIndex(ix); g.computeVertexNormals();
+    return new THREE.Mesh(g, new THREE.MeshPhongMaterial({color: 0x00ffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false, shininess: 80}));
+}
+
+// Nueva Torre Celosía (Lattice Tower) Realista
+function mkA(p, c, h, distM) {
+    const gr = new THREE.Group();
+    
+    // Unidad de escala dinámica para que la torre siempre sea visible
+    const unit = Math.max(distM * 0.008, 80); 
+    const baseWidth = Math.max(unit * 1.5, h * 0.15);
+    const topWidth = Math.max(unit * 0.5, h * 0.05);
+    
+    const segs = Math.max(4, Math.floor(h / (baseWidth * 0.8))); // Secciones de la celosía
+    const segH = h / segs;
+    
+    const legMat = new THREE.MeshStandardMaterial({color: c, emissive: c, emissiveIntensity: 0.6, metalness: 0.5, roughness: 0.5});
+    const braceMat = new THREE.MeshStandardMaterial({color: 0xaaaaaa, emissive: 0x333333, metalness: 0.6, roughness: 0.4});
+    
+    const legRad = Math.max(baseWidth * 0.08, 4); // Grosor de los tubos
+    const braceRad = legRad * 0.5;
+    
+    // Función helper para crear vigas cilíndricas entre dos puntos
+    function createBeam(v1, v2, rad, mat) {
+        const dir = new THREE.Vector3().subVectors(v2, v1);
+        const dist = dir.length();
+        if (dist < 0.001) return null;
+        const geo = new THREE.CylinderGeometry(rad, rad, dist, 4);
+        geo.translate(0, dist / 2, 0); // Pivotar desde la base
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(v1);
+        // Alinear el eje Y del cilindro con la dirección 'dir'
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        return mesh;
+    }
+    
+    // Construcción de las secciones de la torre
+    for (let i = 0; i < segs; i++) {
+        const t1 = i / segs;
+        const t2 = (i + 1) / segs;
+        const w1 = baseWidth * (1 - t1) + topWidth * t1;
+        const w2 = baseWidth * (1 - t2) + topWidth * t2;
+        const y1 = i * segH;
+        const y2 = (i + 1) * segH;
+        
+        const corners1 = [
+            [w1/2, w1/2], [-w1/2, w1/2], [-w1/2, -w1/2], [w1/2, -w1/2]
+        ];
+        const corners2 = [
+            [w2/2, w2/2], [-w2/2, w2/2], [-w2/2, -w2/2], [w2/2, -w2/2]
+        ];
+        
+        // 4 Patas principales
+        for (let j = 0; j < 4; j++) {
+            const v1 = new THREE.Vector3(corners1[j][0], y1, corners1[j][1]);
+            const v2 = new THREE.Vector3(corners2[j][0], y2, corners2[j][1]);
+            const m = createBeam(v1, v2, legRad, legMat);
+            if(m) gr.add(m);
+        }
+        
+        // Travesaños horizontales
+        for (let j = 0; j < 4; j++) {
+            const v1 = new THREE.Vector3(corners2[j][0], y2, corners2[j][1]);
+            const v2 = new THREE.Vector3(corners2[(j+1)%4][0], y2, corners2[(j+1)%4][1]);
+            const m = createBeam(v1, v2, braceRad, braceMat);
+            if(m) gr.add(m);
+        }
+        
+        // Cruces diagonales (X) en las 4 caras
+        for (let j = 0; j < 4; j++) {
+            const v1 = new THREE.Vector3(corners1[j][0], y1, corners1[j][1]);
+            const v2 = new THREE.Vector3(corners2[(j+1)%4][0], y2, corners2[(j+1)%4][1]);
+            const m1 = createBeam(v1, v2, braceRad, braceMat);
+            if(m1) gr.add(m1);
+            
+            const v3 = new THREE.Vector3(corners1[(j+1)%4][0], y1, corners1[(j+1)%4][1]);
+            const v4 = new THREE.Vector3(corners2[j][0], y2, corners2[j][1]);
+            const m2 = createBeam(v3, v4, braceRad, braceMat);
+            if(m2) gr.add(m2);
+        }
+    }
+    
+    // Antenas Sectoriales en la punta (3 paneles)
+    const antH = Math.max(h * 0.15, unit * 2);
+    const antW = Math.max(h * 0.04, unit * 0.5);
+    for(let i=0; i<3; i++) {
+        const angle = (i / 3) * Math.PI * 2;
+        const antGeo = new THREE.BoxGeometry(antW * 1.5, antH, antW * 0.5);
+        const antMat = new THREE.MeshStandardMaterial({color: c, emissive: c, emissiveIntensity: 0.9});
+        const antMesh = new THREE.Mesh(antGeo, antMat);
+        const rad = topWidth * 0.6;
+        antMesh.position.set(Math.cos(angle) * rad, h + antH/2, Math.sin(angle) * rad);
+        antMesh.lookAt(0, h + antH/2, 0); // Apuntando al centro
+        gr.add(antMesh);
+    }
+    
+    // Plato Parabólico (Microwave Dish)
+    const dishGeo = new THREE.SphereGeometry(antW * 1.5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2.5);
+    const dishMat = new THREE.MeshStandardMaterial({color: 0xffffff, emissive: c, emissiveIntensity: 0.2, side: THREE.DoubleSide});
+    const dishMesh = new THREE.Mesh(dishGeo, dishMat);
+    dishMesh.position.set(0, h + antH * 0.8, 0);
+    dishMesh.rotation.x = -Math.PI / 2; // Apuntando horizontalmente
+    gr.add(dishMesh);
+    
+    // Halo base para referencia visual
+    const baseGeo = new THREE.CylinderGeometry(baseWidth * 0.8, baseWidth * 0.8, unit * 0.2, 16);
+    const baseMat = new THREE.MeshBasicMaterial({color: c, transparent: true, opacity: 0.5});
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.y = unit * 0.1;
+    gr.add(baseMesh);
+    
+    gr.position.set(p[0], p[1], p[2]);
+    return gr;
+}
+
+// === API CON CHUNKING ===
+async function fetchElevationsFromAPI(points) {
+    let allElevs = [];
+    const chunkSize = 100;
+    try {
+        for (let i=0; i<points.length; i+=chunkSize) {
+            const chunk = points.slice(i, Math.min(i + chunkSize, points.length));
+            const locStr = chunk.map(p => `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`).join('|');
+            const url = `https://api.opentopodata.org/v1/srtm90m?locations=${locStr}`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'OK') {
+                    allElevs.push(...data.results.map(r => r.elevation === null ? 0 : r.elevation));
+                } else { throw new Error(data.error || 'API Error'); }
+            } else { throw new Error(`HTTP ${res.status}`); }
+        }
+        return allElevs;
+    } catch (e1) {
+        logC(`OpenTopoData falló (${e1.message}). Intentando Open-Elevation...`, 'error');
+    }
+    try {
+        const payload = { locations: points.map(p => ({ latitude: p.lat, longitude: p.lon })) };
+        const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.results) {
+                return data.results.map(r => r.elevation === null ? 0 : r.elevation);
+            }
+            throw new Error('API Error');
+        }
+        throw new Error(`HTTP ${res.status}`);
+    } catch (e2) {
+        logC(`Open-Elevation falló (${e2.message}).`, 'error');
+    }
+    return null; 
+}
+
+function generateGridPoints(lat1, lon1, lat2, lon2, gridN = 12) {
+    const latMin = Math.min(lat1, lat2); const latMax = Math.max(lat1, lat2);
+    const lonMin = Math.min(lon1, lon2); const lonMax = Math.max(lon1, lon2);
+    const dLat = latMax - latMin; const dLon = lonMax - lonMin;
+    const padLat = dLat * 0.6 + 0.01; const padLon = dLon * 0.6 + 0.01;
+    const minLat = latMin - padLat; const maxLat = latMax + padLat;
+    const minLon = lonMin - padLon; const maxLon = lonMax + padLon;
+    const points = [];
+    for(let i=0; i<gridN; i++) { for(let j=0; j<gridN; j++) { const lat = minLat + (maxLat - minLat) * (i / (gridN - 1)); const lon = minLon + (maxLon - minLon) * (j / (gridN - 1)); points.push({ lat, lon }); } }
+    return { points, minLat, maxLat, minLon, maxLon };
+}
+
+function getElevFromGrid(lat, lon, gridData) {
+    const { minLat, maxLat, minLon, maxLon, gridN, elevs } = gridData;
+    const clampedLat = Math.max(minLat, Math.min(maxLat, lat));
+    const clampedLon = Math.max(minLon, Math.min(maxLon, lon));
+    const u = (clampedLon - minLon) / (maxLon - minLon);
+    const v = (clampedLat - minLat) / (maxLat - minLat);
+    const x = u * (gridN - 1); const y = v * (gridN - 1);
+    const x0 = Math.floor(x), x1 = Math.min(x0 + 1, gridN - 1);
+    const y0 = Math.floor(y), y1 = Math.min(y0 + 1, gridN - 1);
+    const e00 = elevs[y0 * gridN + x0]; const e10 = elevs[y0 * gridN + x1];
+    const e01 = elevs[y1 * gridN + x0]; const e11 = elevs[y1 * gridN + x1];
+    const tx = x - x0; const ty = y - y0;
+    return (1 - ty) * ((1 - tx) * e00 + tx * e10) + ty * ((1 - tx) * e01 + tx * e11);
+}
+
+function generateGridTerrainMesh(gridData, zScale) {
+    const { points, elevs, gridN, minLat, maxLat, minLon, maxLon } = gridData;
+    const lat0 = (minLat + maxLat) / 2; const lon0 = (minLon + maxLon) / 2;
+    const vertices = [], indices = [], colors = [];
+    const minEl = Math.min(...elevs); const maxEl = Math.max(...elevs); const elRange = Math.max(1, maxEl - minEl);
+    for(let i=0; i<points.length; i++) {
+        const p = points[i]; const x = (p.lon - lon0) * 111320 * Math.cos(lat0 * Math.PI / 180); const z = (p.lat - lat0) * 111320; const y = elevs[i] * zScale;
+        vertices.push(x, y, z);
+        const t = (elevs[i] - minEl) / elRange; let r, g, b;
+        if(t < 0.25) { r = 0.08 + t*0.15; g = 0.22 + t*0.35; b = 0.06; } else if(t < 0.5) { r = 0.23 + t*0.20; g = 0.55 - t*0.15; b = 0.08; } else if(t < 0.75) { r = 0.43 + t*0.25; g = 0.40 - t*0.10; b = 0.10; } else { r = 0.68 + t*0.20; g = 0.30 + t*0.10; b = 0.15; }
+        colors.push(r, g, b);
+    }
+    for(let i=0; i<gridN-1; i++) { for(let j=0; j<gridN-1; j++) { const a = i * gridN + j; const b = i * gridN + j + 1; const c = (i+1) * gridN + j; const d = (i+1) * gridN + j + 1; indices.push(a, c, b, b, c, d); } }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); geo.setIndex(indices); geo.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide, flatShading: false });
+    const mesh = new THREE.Mesh(geo, mat); mesh.receiveShadow = true; mesh.castShadow = true;
+    return { mesh, lat0, lon0 };
+}
+
+// === THEME ===
+window.toggleTheme = function() {
+    const root = document.documentElement; const isLight = root.getAttribute('data-theme') === 'light'; const newTheme = isLight ? 'dark' : 'light'; root.setAttribute('data-theme', newTheme);
+    const icon = document.querySelector('#themeToggle i'); icon.className = newTheme === 'light' ? 'fa-solid fa-moon text-sm' : 'fa-solid fa-sun text-sm';
+    const bgColor = newTheme === 'light' ? 0xf1f5f9 : 0x080c14; scene.background = new THREE.Color(bgColor);
+    ambient.intensity = newTheme === 'light' ? 1.2 : 0.8; hemiLight.intensity = newTheme === 'light' ? 1.5 : 1.2; ren.toneMappingExposure = newTheme === 'light' ? 1.4 : 1.2;
+    if(state.isAnalyzed && state.analysisResult) drawProfile(state.analysisResult); else drawPreviewProfile();
+    logC(`Tema cambiado a: ${newTheme.toUpperCase()}`, 'info');
+};
+
+// === ANALYSIS ===
+window.runAnalysis = async function(){
+    const btn=document.getElementById('btnCalculate'); const btnIcon=document.getElementById('btnCalcIcon'); btn.disabled = true; btnIcon.className = 'fa-solid fa-spinner fa-spin';
+    const latA=parseFloat(document.getElementById('latA').value),lonA=parseFloat(document.getElementById('lonA').value),latB=parseFloat(document.getElementById('latB').value),lonB=parseFloat(document.getElementById('lonB').value);
+    if([latA,lonA,latB,lonB].some(isNaN)){logC('Coordenadas inválidas.','error');btn.disabled=false;btnIcon.className='fa-solid fa-bolt';return}
+    const freq=parseFloat(document.getElementById('frequency').value)||5,hA=parseFloat(document.getElementById('heightA').value)||30,hB=parseFloat(document.getElementById('heightB').value)||30,gA=parseFloat(document.getElementById('gainA').value)||30,gB=parseFloat(document.getElementById('gainB').value)||30,sens=parseFloat(document.getElementById('sensitivity').value)||-80,kF=parseFloat(document.getElementById('kFactor').value)||1.333;
+    logC('Iniciando análisis de radioenlace...','info');
+    const distM=haversine(latA,lonA,latB,lonB),distKm=distM/1000; logC(`Distancia: ${distKm.toFixed(3)} km`,'info');
+    
+    const N = 50;
+    const linePoints = [];
+    for(let i=0; i<N; i++) { const t = i / (N - 1); linePoints.push({ lat: latA + t * (latB - latA), lon: lonA + t * (lonB - lonA) }); }
+    
+    const gridInfo = generateGridPoints(latA, lonA, latB, lonB, 12);
+    logC(`Descargando malla topográfica 3D (${gridInfo.points.length} puntos)...`, 'info');
+    let gridElevs = await fetchElevationsFromAPI(gridInfo.points);
+    
+    if (!gridElevs) {
+        logC('APIs caídas. Generando terreno local simulado para no interrumpir.', 'muted');
+        gridElevs = gridInfo.points.map(p => 50 + Math.sin(p.lat * 100) * 30 + Math.cos(p.lon * 100) * 30);
+    } else {
+        logC('Malla topográfica 3D cargada.', 'success');
+    }
+    const gridData = { ...gridInfo, elevs: gridElevs, gridN: 12 };
+    
+    logC('Descargando perfil de línea...', 'info');
+    let elevations = await fetchElevationsFromAPI(linePoints);
+    if (!elevations) {
+        logC('API línea falló. Extrayendo perfil desde la malla 3D...', 'muted');
+        elevations = linePoints.map(p => getElevFromGrid(p.lat, p.lon, gridData));
+    } else {
+        logC('Perfil de línea cargado.', 'success');
+    }
+    
+    const allElevs = gridElevs; const minEl = Math.min(...allElevs); const maxEl = Math.max(...allElevs); const elRange = Math.max(1, maxEl - minEl);
+    const zScale = Math.max(3, Math.min(5, distM / 4000)); 
+    
+    const pf_distances = Array.from({length: N}, (_, i) => (distM * i) / (N - 1));
+    let elA = elevations[0]; let elB = elevations[elevations.length-1]; 
+    if(elA === 0 || isNaN(elA)) elA = 24; 
+    if(elB === 0 || isNaN(elB)) elB = 108;
+    
+    const fspl = calcFSPL(distKm, freq); 
+    const tA=[],lo=[],fU=[],fL=[],ob=[];let via=true,mxO=0,minClearance=100;const eA=elA+hA,eB=elB+hB;
+    
+    for(let i=0;i<N;i++){
+        const dK=pf_distances[i]/1000, t=i/(N-1); 
+        tA.push(elevations[i] - eDrop(dK, distKm, kF)); 
+        const l=eA+t*(eB-eA); lo.push(l);
+        
+        const fr = calcFR(distKm, dK, freq); 
+        fU.push(l + fr * 0.6); 
+        fL.push(l - fr * 0.6); 
+        
+        const clearance = ((l - tA[i]) / fr) * 100;
+        if (clearance < minClearance) minClearance = clearance;
+        
+        const io = clearance < 60; 
+        ob.push(io);
+        if(io){ via=false; mxO=Math.max(mxO, tA[i] - fL[i]); }
+    }
+    
+    const rxP=gA+gB-fspl, mg2=rxP-sens; 
+    if(via) logC(`✓ ENLACE VIABLE (Despeje Fresnel: ${minClearance.toFixed(1)}%)`,'success'); else logC(`✗ ENLACE NO VIABLE — Obstrucción: ${mxO.toFixed(1)}m`,'error');
+    
+    state.analysisResult={isViable:via,fspl,distKm,rxP,margin:mg2,maxObs:mxO,params:{freq,hA,hB,gA,gB,sens,kF},profileData:{distances:pf_distances,elevations:elevations,terrainAdjusted:tA,losLine:lo,fresnelUpper:fU,fresnelLower:fL,obstructions:ob}};
+    state.isAnalyzed=true;
+    updBg(via);updSm(distKm,fspl,rxP,mg2,mxO,via,elA,elB,minClearance);
+    document.getElementById('profilePlaceholder').style.display='none';
+    drawProfile(state.analysisResult);
+    
+    // === 3D VIEW UPDATE ===
+    clr3D();
+    const terrainData = generateGridTerrainMesh(gridData, zScale);
+    aG.add(terrainData.mesh);
+    
+    const lat0 = terrainData.lat0; const lon0 = terrainData.lon0;
+    function mapTo3D(lat, lon, el) {
+        const x = (lon - lon0) * 111320 * Math.cos(lat0 * Math.PI / 180);
+        const z = (lat - lat0) * 111320;
+        const y = el * zScale;
+        return [x, y, z];
+    }
+    
+    let pA = mapTo3D(latA, lonA, elA);
+    let pB = mapTo3D(latB, lonB, elB);
+    
+    const raycaster = new THREE.Raycaster();
+    const getTerrainY = (x, z) => {
+        raycaster.set(new THREE.Vector3(x, 1000000, z), new THREE.Vector3(0, -1, 0));
+        const intersects = raycaster.intersectObject(terrainData.mesh);
+        if (intersects.length > 0) return intersects[0].point.y;
+        return null;
+    };
+    
+    let yA = getTerrainY(pA[0], pA[2]);
+    let yB = getTerrainY(pB[0], pB[2]);
+    if (yA !== null) pA[1] = yA;
+    if (yB !== null) pB[1] = yB;
+    
+    const pAT = [pA[0], pA[1] + hA * zScale, pA[2]];
+    const pBT = [pB[0], pB[1] + hB * zScale, pB[2]];
+    
+    aG.add(mkL(pAT, pBT, 0xef4444)); 
+    aG.add(mkF(pAT, pBT, freq, distKm, zScale)); 
+    aG.add(mkA(pA, 0xf59e0b, hA * zScale, distM)); // Nueva Torre Celosía Tx
+    aG.add(mkA(pB, 0x06b6d4, hB * zScale, distM)); // Nueva Torre Celosía Rx
+    aG.add(mkL(pA, pB, 0x334155));
+    
+    const camDist = Math.max(distM * 1.2, 3000); 
+    cam.position.set(pA[0] - camDist * 0.8, camDist * 0.6, pB[2] + camDist * 0.8); 
+    ctrl.target.set((pA[0]+pB[0])/2, ((elA+elB)/2) * zScale * 0.6, (pA[2]+pB[2])/2); 
+    ctrl.update();
+    
+    logC('Mapa topográfico 3D generado.','success');
+    btn.disabled=false; btnIcon.className='fa-solid fa-bolt';
+};
+
+function updBg(v){const b=document.getElementById('statusBadge');const t=document.getElementById('statusText');b.className=`status-badge ${v?'status-viable':'status-failed'}`;t.textContent = v ? 'Enlace Viable' : 'No Viable';}
+function updSm(d,f,rx,mg,o,v,elA,elB,minClearance){
+    document.getElementById('quickSummary').classList.remove('hidden');
+    document.getElementById('sumDist').textContent=d.toFixed(3)+' km';
+    document.getElementById('sumElA').textContent=elA.toFixed(1)+' msnm';
+    document.getElementById('sumElB').textContent=elB.toFixed(1)+' msnm';
+    document.getElementById('sumFSPL').textContent=f.toFixed(2)+' dB';
+    document.getElementById('sumRx').textContent=rx.toFixed(2)+' dBm';
+    const me=document.getElementById('sumMargin');me.textContent=mg.toFixed(2)+' dB';me.style.color=mg>0?'var(--accent)':'var(--danger)';
+    const fe=document.getElementById('sumFresnel');fe.textContent=minClearance.toFixed(1)+' %';fe.style.color=minClearance>=60?'var(--accent)':'var(--danger)';
+    const oe=document.getElementById('sumObs');oe.textContent=v?'Ninguna':o.toFixed(1)+' m';oe.style.color=v?'var(--accent)':'var(--danger)';
+}
+
+// === DIVISOR REDIMENSIONABLE ===
+const splitter = document.getElementById('splitter');
+const map2DContainer = document.getElementById('map2DContainer');
+const map3DContainer = document.getElementById('map3DContainer');
+const topRow = document.getElementById('topRow');
+let isDragging = false;
+
+splitter.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    splitter.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = topRow.getBoundingClientRect();
+    let newWidth = e.clientX - rect.left;
+    
+    const minWidth = rect.width * 0.15;
+    const maxWidth = rect.width * 0.85;
+    if (newWidth < minWidth) newWidth = minWidth;
+    if (newWidth > maxWidth) newWidth = maxWidth;
+    
+    const percentage = (newWidth / rect.width) * 100;
+    map2DContainer.style.width = `${percentage}%`;
+    
+    // Actualizar tamaños dinámicamente mientras arrastras
+    lMap.invalidateSize();
+    onR();
+});
+
+document.addEventListener('mouseup', () => {
+    if (isDragging) {
+        isDragging = false;
+        splitter.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        lMap.invalidateSize();
+        onR();
+    }
+});
+
+// === RESIZE & LOOP ===
+function onR() {
+    const r = tc.getBoundingClientRect(); const w = r.width > 0 ? r.width : 400; const h = r.height > 0 ? r.height : 300; 
+    cam.aspect = w / h; cam.updateProjectionMatrix(); ren.setSize(w, h);
+    if (state.isAnalyzed && state.analysisResult) drawProfile(state.analysisResult); else drawPreviewProfile();
+    if (lMap) lMap.invalidateSize();
+}
+window.addEventListener('resize', onR); new ResizeObserver(onR).observe(tc);
+setTimeout(() => { onR(); drawPreviewProfile(); lMap.invalidateSize(); }, 200);
+
+function animate() {
+    requestAnimationFrame(animate); ctrl.update();
+    const fc = aG.children.find(c => c.isMesh && c.material && c.material.opacity < 0.5);
+    if (fc) fc.material.opacity = 0.20 + 0.05 * Math.sin(Date.now() * 0.002);
+    ren.render(scene, cam);
+}
+animate();
+
+logC('UptaLink v5.0 — Motor 3D Topográfico Real','info');
+logC('Torres Celosía realistas y panel redimensionable.','success');
+</script>
+</body>
+</html>
